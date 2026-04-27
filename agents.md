@@ -79,9 +79,14 @@ A commit must leave the build green. Before committing, verify:
 7. No commented-out code, no `System.out.println`, no `TODO` without an issue reference.
 8. No secrets, `.env` files, or local IDE state added to the commit.
 9. Test coverage (JaCoCo, line counter on merged `test` + `integrationTest` exec data, excluding the Spring Boot entry point and `config/` wiring) is **≥ 90%**. `./gradlew check` runs `jacocoTestCoverageVerification` and fails the build below this threshold.
-10. PR review comments are addressed in the same change that fixes them, and the corresponding GitHub review thread is marked **resolved** once the fix is pushed. A push that responds to a comment but leaves the thread open is incomplete.
 
 If any step fails, fix the root cause. Do not bypass with `--no-verify`, `@Disabled`, or by deleting failing assertions.
+
+## PR invariants (must hold for every pull request)
+
+A PR is the unit of merge into `main`. These rules apply on top of the build-health invariants above and govern the review process itself.
+
+1. PR review comments are addressed in the same change that fixes them, and the corresponding GitHub review thread is marked **resolved** once the fix is pushed. A push that responds to a comment but leaves the thread open is incomplete.
 
 ## Working with PLAN.md
 

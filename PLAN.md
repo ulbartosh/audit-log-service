@@ -45,7 +45,7 @@ Goal: a request hits `POST /audit-events`, persists to Postgres, and is retrieva
   - Wire into the gate: `tasks.named("check") { dependsOn("integrationTest") }` so `./gradlew build`/`check` still runs ITs locally and in CI, but `./gradlew test` stays unit-only.
   - Spotless `target("src/**/*.java")` already covers the new folder.
 
-**Result (2026-04-27):** Done. `settings.gradle.kts`, `build.gradle.kts` (Spring Boot 3.4.1, dependency-management 1.1.7, spotless 6.25.0, Java 21 toolchain, all listed deps incl. `spring-boot-testcontainers`), `gradlew`/`gradlew.bat` + `gradle/wrapper/gradle-wrapper.{jar,properties}`, and `.gitignore` are in place. Spotless `googleJavaFormat()` configured against `src/**/*.java`. (A `gradle.properties` originally pinned Gradle's toolchain at a Homebrew path; removed in A15 in response to PR review — the file was machine-specific and broke portability.)
+**Result (2026-04-27):** Done. `settings.gradle.kts`, `build.gradle.kts` (Spring Boot 3.4.1, dependency-management 1.1.7, spotless 6.25.0, Java 21 toolchain, all listed deps incl. `spring-boot-testcontainers`), `gradlew`/`gradlew.bat` + `gradle/wrapper/gradle-wrapper.{jar,properties}`, and `.gitignore` are in place. Spotless `googleJavaFormat()` configured against `src/**/*.java`. (A `gradle.properties` originally pinned Gradle's toolchain at a Homebrew path; removed during the PR review cycle — the file was machine-specific and broke portability. See the **PR Review Resolution Log** at the end of this file.)
 
 **Result (2026-04-27, follow-up):** Done. Added the `integrationTest` source set to `build.gradle.kts`: source set with main+test outputs on classpath, `integrationTestImplementation`/`integrationTestRuntimeOnly` extending the `test*` configurations, a `Test`-typed `integrationTest` task in the `verification` group with `shouldRunAfter(tasks.test)`, and `check` depending on it. Created `src/integrationTest/java/` and `src/integrationTest/resources/` directories. Verified via `./gradlew tasks --group verification` (task is registered) and `./gradlew help --task integrationTest`. No follow-up.
 
@@ -228,21 +228,7 @@ Goal: turn the new agents.md invariant ("Test coverage ≥ 90%") into a build-fa
 - New `coverage` job (between `integration-tests` and `package`) downloads both exec files, runs `jacocoTestReport` + `jacocoTestCoverageVerification` with `-x test -x integrationTest`, and posts a per-package markdown table to `$GITHUB_STEP_SUMMARY` (Lines / Branches / Methods columns + a TOTAL row). The full HTML+XML report is also uploaded as a `coverage-report` artifact.
 - `package` job's `needs:` updated to depend on `coverage` so we don't ship a jar that regressed coverage.
 
-**Result (2026-04-27, agents.md invariant #10 follow-up):** New rule: PR review comments must be addressed in the same change that fixes them and the corresponding thread marked resolved on GitHub once pushed. Captured because PR #1 received automated review comments (gemini-code-assist) that needed both code fixes and explicit thread-resolution to keep the PR auditable.
-
-### A15. Address gemini-code-assist review on PR #1
-
-Three review comments from `gemini-code-assist[bot]`:
-1. `gradle.properties` — hardcoded Homebrew toolchain path is non-portable.
-2. `AuditEventController.create` — `req.outcome() == null ? Outcome.SUCCESS : req.outcome()` duplicates the default already enforced by `NewAuditEvent`'s compact constructor.
-3. `AuditEventController.create` — hardcoded `URI.create("/audit-events/" + id)` should use `ServletUriComponentsBuilder` so context paths and proxy headers are honored.
-
-**Result (2026-04-27):**
-1. Deleted `gradle.properties`. Defaults (Gradle reads `JAVA_HOME` + auto-downloads if needed) work on every machine; the file existed only to paper over a local toolchain quirk.
-2. Removed the redundant null-check; controller passes `req.outcome()` straight through and lets `NewAuditEvent` default to `SUCCESS`. Centralizes the rule in one place.
-3. Replaced manual URI construction with `ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(event.id()).toUri()`. Removed unused `Outcome` import.
-4. Full `./gradlew build` green; coverage still 97.0%, all 32 tests pass (the controller IT's `header().exists("Location")` assertion still holds).
-5. All three review threads marked resolved on GitHub. No follow-up.
+**Result (2026-04-27, agents.md PR invariant follow-up):** Captured a new PR-specific rule (now living under `agents.md` "PR invariants"): review comments must be addressed in the same change that fixes them and the corresponding thread marked resolved once pushed. Triggered by PR #1 receiving automated review comments (gemini-code-assist) that required both code fixes and explicit thread-resolution to keep the PR auditable. The actual resolutions are tracked in the **PR Review Resolution Log** at the end of this file, not as a numbered Phase A step.
 
 ## Phase B — Robustness polish
 
@@ -341,3 +327,21 @@ CI staging note: split `./gradlew test` and `./gradlew integrationTest` into sep
 - Async ingestion / batching endpoint
 - Hash chain (Phase D, deferred)
 - Cold-storage export to S3 (retention archives in-DB only)
+
+## PR Review Resolution Log
+
+Reverse-chronological log of PR review comments that have been addressed and resolved on GitHub. Per `agents.md` PR invariant #1 (review comments addressed and threads resolved in the same change as the fix). This is **not** a numbered phase step — it tracks an ongoing review process across the lifetime of a PR.
+
+### PR #1 — `feat/phase-a-vertical-slice` (2026-04-27)
+
+Reviewer: `gemini-code-assist[bot]`. Three threads, all addressed in commit `287da54` and resolved on GitHub via the GraphQL `resolveReviewThread` mutation.
+
+| # | File | Comment summary | Fix | Thread |
+| --- | --- | --- | --- | --- |
+| 1 | `gradle.properties` | Hardcoded Homebrew toolchain path is non-portable. | Deleted the file. Defaults (Gradle reads `JAVA_HOME` + auto-downloads if needed) work on every machine; the file existed only to paper over a local toolchain quirk. | resolved |
+| 2 | `controller/AuditEventController.java` | `req.outcome() == null ? Outcome.SUCCESS : req.outcome()` duplicates the default already enforced by `NewAuditEvent`'s compact constructor. | Pass `req.outcome()` straight through; let the domain record default. Removed now-unused `Outcome` import. | resolved |
+| 3 | `controller/AuditEventController.java` | Hardcoded `URI.create("/audit-events/" + id)` for the `Location` header is fragile under context paths and proxy headers. | Replaced with `ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(event.id()).toUri()`. Standard Spring idiom. | resolved |
+
+Verification after the fixes:
+- `./gradlew build` green; 32 tests pass; line coverage 97.0% (unchanged).
+- Controller IT's `header().exists("Location")` assertion still holds with the new builder.
