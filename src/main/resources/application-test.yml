@@ -1,0 +1,8 @@
+# Test profile. Datasource URL/username/password are provided by Testcontainers
+# via @DynamicPropertySource in integration tests (added in phase A8).
+spring:
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
