@@ -182,6 +182,22 @@ Goal: the build-health invariants from `agents.md` are enforced at three points 
 
 **Result (2026-04-27):** Done locally. Files created and `.githooks/*` chmod +x'd. Activation step is documented in `RUNNING.md` (skipped here because the safety contract forbids me running `git config`). Workflow not yet exercised — first run will be on the PR opened in this same step. **Follow-up:** verify the GitHub Actions run is green on the feature branch's PR; if it fails, the most likely culprit is the `org.gradle.java.installations.paths` pin in `gradle.properties` (the Homebrew path doesn't exist on the Linux runner). Boot's Docker build already proved Gradle falls back to `JAVA_HOME` and emits only a warning, so this should be fine, but flagging in case.
 
+**Result (2026-04-27, follow-up):** Done. Split `.github/workflows/build.yml` into explicit CI stages: `formatting` (`spotlessCheck`), `unit-tests` (`test`), `integration-tests` (`integrationTest`), and `package` (`assemble`). Kept the existing gate strength the same while making failures easier to localize and ensuring Docker-backed integration tests only run after fast checks pass. No follow-up beyond exercising the workflow on GitHub.
+
+### A12. ArchUnit — boundary rules enforced at build time
+
+Goal: turn the prose boundaries in `agents.md` ("`domain/` is pure Java", "controller never reaches into persistence", layered one-way deps) into compile-blocking tests instead of code-review hygiene. Runs in the `test` task so it gates alongside unit tests (the `unit-tests` CI stage), not behind Docker.
+
+- `testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")` in `build.gradle.kts`.
+- `src/test/java/com/training/bartosh/auditlog/architecture/ArchitectureTest.java` — single class with four `@ArchTest` rules:
+  1. `domain/` does not depend on `org.springframework..` (Spring kept out of the domain).
+  2. `domain/` does not depend on `jakarta.persistence..` or `org.hibernate..` (JPA kept out of the domain).
+  3. `controller/` does not depend on `..persistence..` (must go through `service/`).
+  4. Layered architecture: `Controller → Service`, `Service → Persistence`, all may depend on `Domain`; nothing may access `Controller`, `Service` only from `Controller`, `Persistence` only from `Service`. `consideringOnlyDependenciesInLayers()` so root/config classes (e.g., `AuditLogApplication`, `OpenApiConfig`) don't trip the rule.
+- Each rule has a `.because("agents.md: ...")` so a future failure points to the source of truth.
+
+**Result (2026-04-27):** Done. Added archunit-junit5 1.3.0 dep; created the `architecture/ArchitectureTest`. All 4 rules pass on the current code (validates that the implementation already respects the documented boundaries). Total unit tests now 18 (11 domain + 4 architecture + 3 service); full `./gradlew build` green at 30 tests across 6 suites. No follow-up.
+
 ## Phase B — Robustness polish
 
 Small commit on top of A:
@@ -241,6 +257,7 @@ src/main/java/com/training/bartosh/auditlog/controller/GlobalExceptionHandler.ja
 src/main/java/com/training/bartosh/auditlog/controller/dto/CreateAuditEventRequest.java
 src/main/java/com/training/bartosh/auditlog/controller/dto/AuditEventResponse.java
 src/main/java/com/training/bartosh/auditlog/controller/dto/PagedResponse.java
+src/test/java/com/training/bartosh/auditlog/architecture/ArchitectureTest.java
 src/test/java/com/training/bartosh/auditlog/domain/AuditEventTest.java
 src/test/java/com/training/bartosh/auditlog/service/AuditEventServiceTest.java
 src/integrationTest/java/com/training/bartosh/auditlog/AuditLogIntegrationTest.java
