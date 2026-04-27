@@ -78,6 +78,7 @@ A commit must leave the build green. Before committing, verify:
 6. Flyway migrations apply cleanly from an empty database; no edits to already-merged migrations.
 7. No commented-out code, no `System.out.println`, no `TODO` without an issue reference.
 8. No secrets, `.env` files, or local IDE state added to the commit.
+9. Test coverage (JaCoCo, line counter on merged `test` + `integrationTest` exec data, excluding the Spring Boot entry point and `config/` wiring) is **≥ 90%**. `./gradlew check` runs `jacocoTestCoverageVerification` and fails the build below this threshold.
 
 If any step fails, fix the root cause. Do not bypass with `--no-verify`, `@Disabled`, or by deleting failing assertions.
 

@@ -209,6 +209,27 @@ Goal: the agents.md "Append-only: no UPDATE on stored events" rule is enforced a
 
 **Result (2026-04-27):** Done. New IT passes; full build green at 31 tests across 7 suites. Locks in the DB-level UPDATE-rejection rule against accidental migration regressions. No follow-up.
 
+### A14. JaCoCo coverage gate (≥ 90% line, merged unit + integration)
+
+Goal: turn the new agents.md invariant ("Test coverage ≥ 90%") into a build-failing check, with a single merged report that combines the unit-test and Testcontainers-IT runs.
+
+- `jacoco` plugin in `build.gradle.kts`, JaCoCo 0.8.12 (Java 21 compatible).
+- Both `test` and `integrationTest` are `Test` tasks, so the plugin auto-instruments both. Their exec files (`build/jacoco/test.exec`, `build/jacoco/integrationTest.exec`) feed two custom-configured tasks:
+  - `jacocoTestReport` — XML + HTML at `build/reports/jacoco/test/`.
+  - `jacocoTestCoverageVerification` — fails the build if `LINE` `COVEREDRATIO` < 0.90.
+- Class-dir filter excludes `AuditLogApplication` (Spring Boot entry point) and `config/**` (pure bean wiring) — both are exercised at startup but carry no testable branches.
+- Both tasks wired into `check`, so `./gradlew build` enforces the gate.
+- `agents.md` Build-health invariant #9 added: ≥ 90% line coverage on the merged exec data, build fails below.
+
+**Result (2026-04-27):** Done. Full build green: **97.0% line coverage** (130/134 covered), well above the 90% gate. Per-package: domain 100%, service 100%, persistence 100%, controller/dto 100%, controller 88.9% (4 lines in `GlobalExceptionHandler.handleIllegalArgument` + `handleUnknown` not yet exercised). Above threshold so no tests added; flagged for a future Phase B polish if we want 100%. No follow-up.
+
+**Result (2026-04-27, follow-up):** Coverage promoted into CI. Workflow gains:
+- `jacoco-exec-test` artifact uploaded by `unit-tests` job and `jacoco-exec-integrationTest` uploaded by `integration-tests` job (both `if: always()` so partial reports are still recoverable on failure).
+- New `coverage` job (between `integration-tests` and `package`) downloads both exec files, runs `jacocoTestReport` + `jacocoTestCoverageVerification` (which fails if line coverage < 90%) without re-running the tests (`-x test -x integrationTest`), and posts a per-package markdown table to `$GITHUB_STEP_SUMMARY` (Lines / Branches / Methods columns + a TOTAL row). The full HTML+XML report is also uploaded as a `coverage-report` artifact.
+- `package` job's `needs:` updated to depend on `coverage` so we don't ship a jar that regressed coverage.
+
+No follow-up beyond observing the first PR run.
+
 ## Phase B — Robustness polish
 
 Small commit on top of A:

@@ -1,5 +1,8 @@
+import java.math.BigDecimal
+
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "3.4.1"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "6.25.0"
@@ -60,8 +63,55 @@ val integrationTest = tasks.register<Test>("integrationTest") {
     shouldRunAfter(tasks.test)
 }
 
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+val coverageExecData = fileTree(layout.buildDirectory.dir("jacoco")) {
+    include("test.exec", "integrationTest.exec")
+}
+
+val coverageClassDirs = files(
+    fileTree(layout.buildDirectory.dir("classes/java/main")) {
+        // Spring Boot entry point and pure @Configuration wiring carry no
+        // testable behavior; excluding them keeps the line counter focused
+        // on logic that the test suites actually exercise.
+        exclude(
+            "com/training/bartosh/auditlog/AuditLogApplication.class",
+            "com/training/bartosh/auditlog/config/**"
+        )
+    }
+)
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.named("test"), integrationTest)
+    executionData.setFrom(coverageExecData)
+    classDirectories.setFrom(coverageClassDirs)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.named("test"), integrationTest)
+    executionData.setFrom(coverageExecData)
+    classDirectories.setFrom(coverageClassDirs)
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = BigDecimal("0.90")
+            }
+        }
+    }
+}
+
 tasks.named("check") {
     dependsOn(integrationTest)
+    dependsOn(tasks.named("jacocoTestReport"))
+    dependsOn(tasks.named("jacocoTestCoverageVerification"))
 }
 
 spotless {
