@@ -5,7 +5,6 @@ import com.training.bartosh.auditlog.controller.dto.CreateAuditEventRequest;
 import com.training.bartosh.auditlog.controller.dto.PagedResponse;
 import com.training.bartosh.auditlog.domain.AuditEvent;
 import com.training.bartosh.auditlog.domain.NewAuditEvent;
-import com.training.bartosh.auditlog.domain.Outcome;
 import com.training.bartosh.auditlog.service.AuditEventService;
 import com.training.bartosh.auditlog.service.SearchQuery;
 import jakarta.validation.Valid;
@@ -22,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
 @RequestMapping("/audit-events")
@@ -39,15 +39,14 @@ public class AuditEventController {
   public ResponseEntity<AuditEventResponse> create(
       @Valid @RequestBody CreateAuditEventRequest req) {
     NewAuditEvent input =
-        new NewAuditEvent(
-            req.actor(),
-            req.action(),
-            req.resource(),
-            req.outcome() == null ? Outcome.SUCCESS : req.outcome(),
-            req.context());
+        new NewAuditEvent(req.actor(), req.action(), req.resource(), req.outcome(), req.context());
     AuditEvent event = service.record(input);
-    return ResponseEntity.created(URI.create("/audit-events/" + event.id()))
-        .body(AuditEventResponse.from(event));
+    URI location =
+        ServletUriComponentsBuilder.fromCurrentRequest()
+            .path("/{id}")
+            .buildAndExpand(event.id())
+            .toUri();
+    return ResponseEntity.created(location).body(AuditEventResponse.from(event));
   }
 
   @GetMapping
