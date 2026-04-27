@@ -198,6 +198,17 @@ Goal: turn the prose boundaries in `agents.md` ("`domain/` is pure Java", "contr
 
 **Result (2026-04-27):** Done. Added archunit-junit5 1.3.0 dep; created the `architecture/ArchitectureTest`. All 4 rules pass on the current code (validates that the implementation already respects the documented boundaries). Total unit tests now 18 (11 domain + 4 architecture + 3 service); full `./gradlew build` green at 30 tests across 6 suites. No follow-up.
 
+### A13. Append-only invariant covered by integration test
+
+Goal: the agents.md "Append-only: no UPDATE on stored events" rule is enforced at the DB layer by `audit_events_no_update` (`DO INSTEAD NOTHING` in V1). Without a regression test, dropping or breaking that rule wouldn't fail the build.
+
+- `src/integrationTest/.../persistence/AuditEventImmutabilityIT` — using the Testcontainers Postgres datasource:
+  1. INSERT a row directly via JDBC.
+  2. Attempt `UPDATE audit_events SET actor = 'tampered' WHERE id = ?`.
+  3. Assert `executeUpdate()` returned 0 and the row's `actor` is unchanged.
+
+**Result (2026-04-27):** Done. New IT passes; full build green at 31 tests across 7 suites. Locks in the DB-level UPDATE-rejection rule against accidental migration regressions. No follow-up.
+
 ## Phase B — Robustness polish
 
 Small commit on top of A:
@@ -264,6 +275,7 @@ src/integrationTest/java/com/training/bartosh/auditlog/AuditLogIntegrationTest.j
 src/integrationTest/java/com/training/bartosh/auditlog/TestcontainersConfiguration.java
 src/integrationTest/java/com/training/bartosh/auditlog/OpenApiIT.java
 src/integrationTest/java/com/training/bartosh/auditlog/controller/AuditEventControllerIT.java
+src/integrationTest/java/com/training/bartosh/auditlog/persistence/AuditEventImmutabilityIT.java
 src/integrationTest/java/com/training/bartosh/auditlog/persistence/FlywayMigrationIT.java
 ```
 
