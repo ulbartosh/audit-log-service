@@ -87,6 +87,7 @@ If any step fails, fix the root cause. Do not bypass with `--no-verify`, `@Disab
 A PR is the unit of merge into `main`. These rules apply on top of the build-health invariants above and govern the review process itself.
 
 1. PR review comments are addressed in the same change that fixes them, and the corresponding GitHub review thread is marked **resolved** once the fix is pushed. A push that responds to a comment but leaves the thread open is incomplete.
+2. **One PLAN.md step, one branch, one PR.** Every new numbered step in `PLAN.md` lands on its own feature branch and is merged through its own PR. Independent steps must not be combined on a single branch — small, focused PRs make review, revert, and bisection tractable. Branch naming: `feat/<phase>-<short-slug>` (e.g. `feat/phase-c-retention`, `feat/b1-pagination-cap`). Mid-PR review fixes for the same step stay on the same branch.
 
 ## Working with PLAN.md
 
