@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Fast feedback before a commit lands: unit tests + formatter check.
+# Integration tests intentionally NOT run here (Docker not always available
+# at commit time) — pre-push covers the full gate.
+set -e
+echo "[pre-commit] ./gradlew --console=plain test spotlessCheck"
+./gradlew --console=plain test spotlessCheck

@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: audit-log-service
+  datasource:
+    url: ${AUDITLOG_DATASOURCE_URL:jdbc:postgresql://localhost:5432/auditlog}
+    username: ${AUDITLOG_DATASOURCE_USERNAME:auditlog}
+    password: ${AUDITLOG_DATASOURCE_PASSWORD:auditlog}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+auditlog:
+  retention:
+    days: 365

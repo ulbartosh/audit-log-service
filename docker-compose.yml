@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: auditlog
+      POSTGRES_USER: auditlog
+      POSTGRES_PASSWORD: auditlog
+    ports:
+      # Host-side 55432 to avoid colliding with a local Postgres on 5432.
+      # The app talks to Postgres over the compose network and uses 5432 there.
+      - "55432:5432"
+    volumes:
+      - audit-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auditlog -d auditlog"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      AUDITLOG_DATASOURCE_URL: jdbc:postgresql://db:5432/auditlog
+      AUDITLOG_DATASOURCE_USERNAME: auditlog
+      AUDITLOG_DATASOURCE_PASSWORD: auditlog
+    ports:
+      - "8080:8080"
+
+volumes:
+  audit-pg-data:

@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Full build-health gate before a push: compile + unit + integration + spotless.
+# Requires Docker (Testcontainers spins up Postgres for integrationTest).
+set -e
+echo "[pre-push] ./gradlew --console=plain build"
+./gradlew --console=plain build

@@ -1,0 +1,32 @@
+# Gradle
+.gradle/
+build/
+!gradle-wrapper.jar
+!gradle/wrapper/
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse / VS Code
+.classpath
+.project
+.settings/
+.vscode/
+bin/
+
+# Local config
+.env
+application-local.yml
+application-local.yaml
+application-local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code (per-user agent settings — never share)
+.claude/
