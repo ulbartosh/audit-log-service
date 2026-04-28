@@ -350,11 +350,11 @@ Reverse-chronological log of PR review comments that have been addressed and res
 
 ### PR #2 — `docs/agents-pr-invariant-one-step-one-pr` (2026-04-28)
 
-Reviewer: `gemini-code-assist`. One thread, addressed in this round and to be resolved on GitHub after the fix is pushed.
+Reviewer: `gemini-code-assist`. One thread, addressed in commit `6c0f9c3` and resolved on GitHub.
 
 | # | File | Comment summary | Fix | Thread |
 | --- | --- | --- | --- | --- |
-| 1 | `agents.md` | The branch naming template used `<phase>` while one example used a step ID (`b1`), and "Independent steps" could be misread as allowing some step combinations. | Updated the invariant to `feat/<step-id>-<short-slug>` and tightened the prohibition to `Steps must not be combined on a single branch`. No `README.md` update needed: this is an internal PR-governance wording fix, not a user-facing or operator-facing behavior change. | pending push + resolve |
+| 1 | `agents.md` | The branch naming template used `<phase>` while one example used a step ID (`b1`), and "Independent steps" could be misread as allowing some step combinations. | Updated the invariant to `feat/<step-id>-<short-slug>` and tightened the prohibition to `Steps must not be combined on a single branch`. No `README.md` update needed: this is an internal PR-governance wording fix, not a user-facing or operator-facing behavior change. | resolved |
 
 ### PR #1 — `feat/phase-a-vertical-slice` (2026-04-27)
 
