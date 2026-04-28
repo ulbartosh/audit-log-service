@@ -15,10 +15,15 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
- * Inheriting from {@link ResponseEntityExceptionHandler} gives correct 4xx responses for the Spring
- * framework exceptions we don't handle explicitly (e.g. {@code HttpMessageNotReadableException} for
- * malformed JSON, {@code HttpRequestMethodNotSupportedException} for wrong verbs). The catch-all
- * {@code Exception} handler below therefore only fires for genuine application errors.
+ * All error responses share the shape <code>{"errors":[{"field"?,"message"}]}</code> so clients can
+ * parse one structure regardless of failure mode. Field-level errors include {@code field};
+ * non-validation errors omit it.
+ *
+ * <p>Inheriting from {@link ResponseEntityExceptionHandler} gives correct 4xx responses for the
+ * Spring framework exceptions we don't handle explicitly (e.g. {@code
+ * HttpMessageNotReadableException} for malformed JSON, {@code
+ * HttpRequestMethodNotSupportedException} for wrong verbs). The catch-all {@code Exception} handler
+ * below therefore only fires for genuine application errors.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
@@ -45,15 +50,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   }
 
   @ExceptionHandler(IllegalArgumentException.class)
-  public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+  public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
     String message = ex.getMessage() == null ? "Invalid request" : ex.getMessage();
-    return ResponseEntity.badRequest().body(Map.of("message", message));
+    return errorResponse(HttpStatus.BAD_REQUEST, message);
   }
 
   @ExceptionHandler(Exception.class)
-  public ResponseEntity<Map<String, String>> handleUnknown(Exception ex) {
+  public ResponseEntity<Map<String, Object>> handleUnknown(Exception ex) {
     log.error("Unhandled error", ex);
-    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-        .body(Map.of("message", "Internal server error"));
+    return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
+  }
+
+  private static ResponseEntity<Map<String, Object>> errorResponse(
+      HttpStatus status, String message) {
+    return ResponseEntity.status(status)
+        .body(Map.of("errors", List.of(Map.of("message", message))));
   }
 }

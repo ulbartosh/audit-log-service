@@ -12,7 +12,6 @@ import java.net.URI;
 import java.time.Instant;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -61,8 +60,10 @@ public class AuditEventController {
       @RequestParam(defaultValue = "50") int size) {
     int cappedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
     int safePage = Math.max(page, 0);
-    PageRequest pageable =
-        PageRequest.of(safePage, cappedSize, Sort.by(Sort.Direction.DESC, "occurredAt"));
+    // Pageable is built without a Sort; the service applies the default
+    // (occurredAt DESC) using the JPA Metamodel so the property name stays
+    // refactor-safe and the controller does not depend on persistence.
+    PageRequest pageable = PageRequest.of(safePage, cappedSize);
     Page<AuditEvent> result = service.search(new SearchQuery(actor, resource, from, to), pageable);
     return new PagedResponse<>(
         result.getContent().stream().map(AuditEventResponse::from).toList(),

@@ -361,3 +361,16 @@ Reviewer: `gemini-code-assist[bot]`. Five threads, all addressed in this round a
 Verification after the fixes:
 - `./gradlew build` green; 32 tests pass; line coverage 96.3% (above the 90% gate; minor drop reflects new branches in the exception handler — still healthy).
 - `docker compose build app` produced the runtime image with the renamed `app.jar`.
+
+#### Third round (2026-04-28)
+
+Reviewer: `gemini-code-assist[bot]`. Two threads, addressed in this round and resolved on GitHub.
+
+| # | File | Comment summary | Fix |
+| --- | --- | --- | --- |
+| 1 | `controller/AuditEventController.java` | `Sort.by(..., "occurredAt")` is hardcoded and bypasses the JPA Metamodel benefit; reviewer suggests moving default sort into the service layer (where the metamodel is accessible) so renames are caught at compile time. | Controller now builds `PageRequest.of(safePage, cappedSize)` without a `Sort`. The service applies the default (`occurredAt DESC`) only when the incoming `Pageable` is unsorted, using the generated `AuditEventEntity_.OCCURRED_AT` constant — a future field rename in the entity now fails compilation. Removed `Sort` import from the controller; the layered-architecture rule (controller cannot depend on persistence) remains intact. |
+| 2 | `controller/GlobalExceptionHandler.java` | Inconsistent error shapes — validation returned `{errors:[{field,message}]}`, others returned `{message:...}`. | Unified all error responses to `{errors:[{field?,message}]}`. Added a private `errorResponse(status, message)` helper used by `handleIllegalArgument` and `handleUnknown`. Field-level validation errors keep their `{field,message}` objects; other failures emit a single `{message}` object inside the same `errors` array. The controller IT's `jsonPath("$.errors").exists()` still holds. |
+
+Verification after the fixes:
+- `./gradlew build` green; 32 tests pass; line coverage 95.0% (above the 90% gate).
+- The controller's `Sort` import is gone — `ArchitectureTest.controllerDoesNotAccessPersistence` still passes (the metamodel constant is referenced from the service layer, not the controller).
