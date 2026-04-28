@@ -243,9 +243,22 @@ Small commit on top of A:
 
 - New migration `V2__create_audit_events_archive.sql` — `audit_events_archive` (same columns + `archived_at TIMESTAMPTZ NOT NULL DEFAULT now()`).
 - `service/RetentionService.archiveOlderThan(Duration)` — single transaction: `INSERT INTO archive (...) SELECT ... FROM main WHERE occurred_at < :cutoff RETURNING id`, then `DELETE FROM main WHERE id = ANY(:ids)`. Batched in chunks of 1000.
-- `service/RetentionScheduler` — `@Scheduled(cron = "0 0 3 * * *", zone = "UTC")`, calls service with `Duration.ofDays(properties.retention().days())`.
+- `service/RetentionScheduler` — schedule pulled from configuration, not hardcoded:
+  - `@Scheduled(cron = "${auditlog.retention.cron:0 0 3 * * *}", zone = "${auditlog.retention.zone:UTC}")`
+  - calls service with `Duration.ofDays(properties.retention().days())`.
+  - Property placeholders use defaults so the scheduler still works out-of-the-box (3 AM UTC daily) without `application.yml` overrides; operators can change the cadence without recompiling.
+- Extend `config/AuditLogProperties.Retention` from `(int days)` to `(int days, String cron, String zone)` so the same record validates the values that the placeholders consume. Defaults set in `application.yml` (see below). Spring Boot validates the cron string at startup via `CronExpression.parse` when the bean is bound.
+- `application.yml` adds:
+  ```yaml
+  auditlog:
+    retention:
+      days: 365          # already present
+      cron: "0 0 3 * * *"
+      zone: "UTC"
+  ```
+  Document that `cron` follows Spring's 6-field syntax (`second minute hour day-of-month month day-of-week`).
 - Enable scheduling on the application class with `@EnableScheduling`.
-- Integration test: insert events with manipulated `occurred_at`, invoke `RetentionService` directly (don't wait for cron), assert main has young rows only and archive has old rows.
+- Integration test: insert events with manipulated `occurred_at`, invoke `RetentionService` directly (don't wait for cron), assert main has young rows only and archive has old rows. A second IT covers the property override path: set `auditlog.retention.cron=...` via `@DynamicPropertySource`, boot the context, and assert the resolved schedule on the registered `ScheduledTask` (or accept an alternative expression and verify no startup failure).
 - Code comment at the DELETE call referencing the "no DELETE" invariant and explaining the carve-out for retention.
 
 ## Phase D — Stretch: hash chain (defer; do not implement now)
