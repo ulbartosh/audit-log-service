@@ -387,3 +387,14 @@ Reviewer: `gemini-code-assist[bot]`. Two threads, addressed in this round and re
 Verification after the fixes:
 - `./gradlew build` green; 32 tests pass; line coverage 95.0% (above the 90% gate).
 - The controller's `Sort` import is gone — `ArchitectureTest.controllerDoesNotAccessPersistence` still passes (the metamodel constant is referenced from the service layer, not the controller).
+
+#### Fourth round (2026-04-28)
+
+Reviewer: `gemini-code-assist[bot]`. One thread, addressed and resolved.
+
+| # | File | Comment summary | Fix |
+| --- | --- | --- | --- |
+| 1 | `Dockerfile` | Dependency resolution and source copy were in the same layer; editing any file under `src/` invalidated the dep cache and forced a re-download on every rebuild. Reviewer suggested splitting deps into their own layer. | Reordered the builder stage so dependency resolution sits in its own layer ahead of `COPY src`. The new sequence: copy `gradlew`/build files/`gradle/` → run `./gradlew --no-daemon dependencies --quiet` → copy `src/` → `./gradlew bootJar`. Editing `src/` now only invalidates the last two layers; the deps layer stays cached as long as `build.gradle.kts` / `settings.gradle.kts` / `gradle/` are unchanged. |
+
+Verification after the fixes:
+- `docker compose build app --no-cache` produced a working image; the deps task ran once and `bootJar` finished in ~15 s using the warmed Gradle cache.
