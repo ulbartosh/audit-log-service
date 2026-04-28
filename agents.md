@@ -88,6 +88,8 @@ A PR is the unit of merge into `main`. These rules apply on top of the build-hea
 
 1. PR review comments are addressed in the same change that fixes them, and the corresponding GitHub review thread is marked **resolved** once the fix is pushed. A push that responds to a comment but leaves the thread open is incomplete.
 2. **One PLAN.md step, one branch, one PR.** Every new numbered step in `PLAN.md` lands on its own feature branch and is merged through its own PR. Independent steps must not be combined on a single branch — small, focused PRs make review, revert, and bisection tractable. Branch naming: `feat/<phase>-<short-slug>` (e.g. `feat/phase-c-retention`, `feat/b1-pagination-cap`). Mid-PR review fixes for the same step stay on the same branch.
+3. Before creating a new feature branch, **fetch and fast-forward `main` first** (`git fetch origin && git checkout main && git pull --ff-only`), then branch from the up-to-date tip. Branching from a stale `main` produces accidental rebase noise and conflicts that the squash-merge of the previous PR has already resolved.
+4. Keep `README.md` fresh in the same PR whenever user-facing or operator-facing behavior changes. At minimum, update README when the API contract, quickstart/run flow, ports/URLs, required env vars, local test/build commands, hooks, CI-visible verification flow, or key documentation entry points change. If a code change genuinely needs no README update, say so explicitly in the PR/PLAN context.
 
 ## Working with PLAN.md
 

@@ -16,6 +16,7 @@ Per `agents.md` ("Working with PLAN.md"), every executed step here gets a 1–3 
 
 - Added a "Working with PLAN.md" section to `agents.md` instructing agents to append a short result of execution at the end of every plan step.
 - **Result:** Done. `agents.md` updated with the new section above "Negative invariants". No code changes; no follow-up.
+- **Result (2026-04-28, follow-up):** Added a PR invariant requiring `README.md` to stay current in the same change whenever API behavior, quickstart/run flow, ports/URLs, env vars, test/build commands, hooks, CI-visible verification flow, or documentation entry points change. This codifies the doc-consolidation work already reflected in the README/RUNNING merge. No follow-up.
 
 ## Decisions (defaults — flag at review if you want to change)
 
@@ -167,9 +168,11 @@ Goal: anyone with Docker can bring up the full stack (app + Postgres) without in
 - `docker-compose.yml` — two services:
   - `db`: `postgres:16-alpine` with named volume `audit-pg-data`, env-driven `auditlog`/`auditlog`/`auditlog` credentials, healthcheck `pg_isready -U auditlog -d auditlog` (2 s interval, 30 retries). Host-side port is **`55432`** (mapped to container `5432`) to avoid colliding with a local Postgres install.
   - `app`: `build: .`, depends on `db` healthcheck, env-injects `AUDITLOG_DATASOURCE_*` so Boot connects via the compose network (`db:5432`), publishes `8080:8080`.
-- `RUNNING.md` — operator guide covering: prereqs, `docker compose` mode, `./gradlew bootRun` mode, curl smoke checklist, Swagger UI walkthrough (step-by-step `Try it out` against the running service), test-suite commands, troubleshooting.
+- `RUNNING.md` — operator guide covering: prereqs, `docker compose` mode, `./gradlew bootRun` mode, curl smoke checklist, Swagger UI walkthrough (step-by-step `Try it out` against the running service), test-suite commands, troubleshooting. *(Superseded 2026-04-28: contents folded into `README.md` and the standalone file deleted.)*
 
-**Result (2026-04-27):** Done. Verified end-to-end: `docker compose build app` produced the image (multi-stage build, ~90 s); `docker compose up -d` brought up both services healthy; live smoke confirmed `POST /audit-events` → 201 with `Location` header, `GET /audit-events?actor=u1` returned the event, missing-actor → 400 with `{errors:[{field:"actor",message:"must not be blank"}]}`, `/v3/api-docs` returned the OpenAPI JSON with the configured title, `/swagger-ui.html` 302→`/swagger-ui/index.html`. Stack torn down with `docker compose down`. **Decision flagged:** host-side Postgres port is `55432` (the standard 5432 was already bound on this machine — RUNNING.md documents this and how to revert). No follow-up.
+**Result (2026-04-27):** Done. Verified end-to-end: `docker compose build app` produced the image (multi-stage build, ~90 s); `docker compose up -d` brought up both services healthy; live smoke confirmed `POST /audit-events` → 201 with `Location` header, `GET /audit-events?actor=u1` returned the event, missing-actor → 400 with `{errors:[{field:"actor",message:"must not be blank"}]}`, `/v3/api-docs` returned the OpenAPI JSON with the configured title, `/swagger-ui.html` 302→`/swagger-ui/index.html`. Stack torn down with `docker compose down`. **Decision flagged:** host-side Postgres port is `55432` (the standard 5432 was already bound on this machine — README.md documents this and how to revert). No follow-up.
+
+**Result (2026-04-28, doc consolidation):** Folded the standalone `RUNNING.md` into `README.md` and deleted `RUNNING.md`. README now carries the project description, tech stack, quickstart, full **API reference** (POST/GET schemas, query params, error shape, invariants), curl smoke checklist, local-dev / `bootRun` mode, test-and-gate commands, and the one-time hooks-activation step. Trimmed the long Swagger UI tutorial and the troubleshooting section — the API tables make Swagger self-explanatory and the troubleshooting cases were Docker-generic. README also adds explicit pointers to `agents.md` and `PLAN.md` so a new contributor can find architecture and history in two clicks.
 
 ### A11. CI + local hooks: pre-commit, pre-push, GitHub Actions
 
@@ -177,7 +180,7 @@ Goal: the build-health invariants from `agents.md` are enforced at three points 
 
 - `.githooks/pre-commit` — `./gradlew test spotlessCheck`. Unit tests + formatter only; no Docker required so the hook never blocks on environment state. Executable.
 - `.githooks/pre-push` — `./gradlew build`. Full gate (compile + test + integrationTest + spotlessCheck). Needs Docker for Testcontainers; deliberate bypass via `git push --no-verify` if Docker isn't available locally. Executable.
-- Hooks are tracked under `.githooks/` rather than the unversioned `.git/hooks/`. Activation is one-time per clone: `git config core.hooksPath .githooks`. Documented in `RUNNING.md`.
+- Hooks are tracked under `.githooks/` rather than the unversioned `.git/hooks/`. Activation is one-time per clone: `git config core.hooksPath .githooks`. Documented in `README.md`.
 - `.github/workflows/build.yml` — runs on `pull_request` to `main` and `push` to `main`. Steps: checkout, `setup-java@v4` (Temurin 21), `gradle/actions/setup-gradle@v4` (caching), `./gradlew --no-daemon build`. On failure, uploads `build/reports/tests/` and `build/test-results/` as an artifact for diagnosis. Docker is preinstalled on `ubuntu-latest`, so Testcontainers ITs run unchanged.
 
 **Result (2026-04-27):** Done locally. Files created and `.githooks/*` chmod +x'd. Activation step is documented in `RUNNING.md` (skipped here because the safety contract forbids me running `git config`). Workflow not yet exercised — first run will be on the PR opened in this same step. **Follow-up:** verify the GitHub Actions run is green on the feature branch's PR; if it fails, the most likely culprit is the `org.gradle.java.installations.paths` pin in `gradle.properties` (the Homebrew path doesn't exist on the Linux runner). Boot's Docker build already proved Gradle falls back to `JAVA_HOME` and emits only a warning, so this should be fine, but flagging in case.
