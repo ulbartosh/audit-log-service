@@ -1,4 +1,5 @@
 import java.math.BigDecimal
+import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 plugins {
     java
@@ -44,6 +45,8 @@ dependencies {
     runtimeOnly("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
+    annotationProcessor("org.hibernate.orm:hibernate-jpamodelgen")
+
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:junit-jupiter")
@@ -53,6 +56,13 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// Boot's bootJar produces the runnable artifact. Name it explicitly so the
+// Dockerfile can copy a single concrete file instead of globbing *.jar
+// (the latter breaks if any other jar lands in libs/).
+tasks.named<BootJar>("bootJar") {
+    archiveFileName.set("app.jar")
 }
 
 val integrationTest = tasks.register<Test>("integrationTest") {
@@ -78,7 +88,9 @@ val coverageClassDirs = files(
         // on logic that the test suites actually exercise.
         exclude(
             "com/training/bartosh/auditlog/AuditLogApplication.class",
-            "com/training/bartosh/auditlog/config/**"
+            "com/training/bartosh/auditlog/config/**",
+            // Hibernate JPA Metamodel generated classes (e.g. AuditEventEntity_.class).
+            "**/*_.class"
         )
     }
 )

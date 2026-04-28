@@ -5,7 +5,7 @@ This guide covers two run modes, the Swagger UI walkthrough, and how to run the 
 ## Prerequisites
 
 - **Docker Desktop** (required for `docker compose` mode and for the integration tests).
-- **Java 21** (only required for the Gradle / `bootRun` mode, not for `docker compose`). The repo's `gradle.properties` pins Gradle's toolchain to Homebrew `openjdk@21`; if you use a different JDK install, override with `org.gradle.java.installations.paths` or remove the pin.
+- **Java 21** (only required for the Gradle / `bootRun` mode, not for `docker compose`). Gradle's toolchain detection picks up any JDK 21 on the standard locations / `JAVA_HOME`; if none is found it auto-downloads one. To force a specific install, set `org.gradle.java.installations.paths` in `~/.gradle/gradle.properties` (per-user, not committed).
 
 Verify Docker is running before continuing:
 

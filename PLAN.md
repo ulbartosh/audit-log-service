@@ -345,3 +345,19 @@ Reviewer: `gemini-code-assist[bot]`. Three threads, all addressed in commit `287
 Verification after the fixes:
 - `./gradlew build` green; 32 tests pass; line coverage 97.0% (unchanged).
 - Controller IT's `header().exists("Location")` assertion still holds with the new builder.
+
+#### Second round (2026-04-28)
+
+Reviewer: `gemini-code-assist[bot]`. Five threads, all addressed in this round and resolved on GitHub.
+
+| # | File | Comment summary | Fix |
+| --- | --- | --- | --- |
+| 1 | `Dockerfile` | `COPY *.jar app.jar` is fragile if multiple jars exist in `build/libs/` (e.g. Boot's plain jar). | Pinned `bootJar` `archiveFileName` to `app.jar` in `build.gradle.kts`; Dockerfile now copies the exact filename, no wildcard. Also removed the stale `gradle.properties` reference from the Dockerfile (file was deleted in the prior PR review round). |
+| 2 | `RUNNING.md` | Prereqs section still claimed `gradle.properties` pins the toolchain to Homebrew — file was removed. | Rewrote the bullet: Gradle's toolchain detection / `JAVA_HOME` / auto-download covers every dev machine; per-user pin goes in `~/.gradle/gradle.properties`, not the repo. |
+| 3 | `GlobalExceptionHandler.handleIllegalArgument` | `Map.of("message", ex.getMessage())` NPE if `getMessage()` returns null. | Null-coalesced to `"Invalid request"` before passing to `Map.of`. |
+| 4 | `GlobalExceptionHandler` | `@ExceptionHandler(Exception.class)` swallowed Spring's framework exceptions (e.g. `HttpMessageNotReadableException` for malformed JSON) as 500 instead of 4xx. | Class now extends `ResponseEntityExceptionHandler`, inheriting correct 4xx defaults for framework exceptions. Overrode `handleMethodArgumentNotValid` to keep our `{errors:[{field,message}]}` body shape. The `Exception` catch-all stays but only fires for genuine application errors. |
+| 5 | `AuditEventSpecifications` | Hardcoded property strings (`"actor"`, `"resource"`, `"occurredAt"`) are not refactor-safe. | Added `annotationProcessor("org.hibernate.orm:hibernate-jpamodelgen")` so Hibernate generates `AuditEventEntity_` at build time; specs now reference `AuditEventEntity_.actor` / `.resource` / `.occurredAt` (typed `SingularAttribute`). A future field rename in the entity now fails at compile time. JaCoCo class-dir filter extended to exclude `**/*_.class`. |
+
+Verification after the fixes:
+- `./gradlew build` green; 32 tests pass; line coverage 96.3% (above the 90% gate; minor drop reflects new branches in the exception handler — still healthy).
+- `docker compose build app` produced the runtime image with the renamed `app.jar`.
