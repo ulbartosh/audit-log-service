@@ -1,8 +1,13 @@
 # Test profile. Datasource URL/username/password are provided by Testcontainers
-# via @DynamicPropertySource in integration tests (added in phase A8).
+# via Spring Boot 3 @ServiceConnection support in integration tests.
 spring:
   flyway:
     enabled: true
   jpa:
     hibernate:
       ddl-auto: validate
+    show-sql: true
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE

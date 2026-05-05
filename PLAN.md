@@ -22,7 +22,7 @@ Per `agents.md` ("Working with PLAN.md"), every executed step here gets a 1–3 
 
 - **Records over classes** for the domain (Java 21 makes them ergonomic; immutability matches append-only).
 - **Spring Data JPA + Specifications** for search (optional `actor` / `resource` / time-range filters compose cleanly). Listed in `agents.md` as the persistence approach.
-- **Retention via separate `audit_events_archive` table**, populated by a daily scheduler. The "no DELETE" functional invariant applies to *user-facing* operations; retention is a system policy that moves cold rows out of the hot table. This will be called out in code comments where the DELETE happens.
+- **Retention via separate `audit_events_archive` table**, populated by a daily scheduler. Retention is copy-only: cold rows are archived into a secondary table, and the source `audit_events` rows remain untouched so append-only stays strict at both the API and DB layers.
 - **Hash chain (stretch) deferred** to phase D — not in the first delivery.
 - **Spotless + google-java-format** for the `./gradlew check` style gate. No Checkstyle (overlapping concerns).
 - **No authn/authz** in this iteration — `agents.md` doesn't specify any, and audit-log services typically sit behind a network boundary.
@@ -79,9 +79,8 @@ CREATE INDEX idx_audit_events_time          ON audit_events (occurred_at DESC);
 
 -- Append-only enforcement at the DB layer.
 CREATE RULE audit_events_no_update AS ON UPDATE TO audit_events DO INSTEAD NOTHING;
--- DELETE is permitted but only used by the retention scheduler (phase C).
--- The functional "no DELETE" invariant is enforced in application code by
--- never exposing a delete operation through controller/service.
+-- DELETE blocking is added in a later migration so the rollout can stay
+-- forward-only even though V1 originally blocked only UPDATE.
 ```
 
 `outcome` is stored as TEXT (mapped to enum in Java) to avoid a Postgres ENUM migration headache.
@@ -247,7 +246,7 @@ Small commit on top of A:
 ## Phase C — Retention
 
 - New migration `V2__create_audit_events_archive.sql` — `audit_events_archive` (same columns + `archived_at TIMESTAMPTZ NOT NULL DEFAULT now()`).
-- `service/RetentionService.archiveOlderThan(Duration)` — single transaction: `INSERT INTO archive (...) SELECT ... FROM main WHERE occurred_at < :cutoff RETURNING id`, then `DELETE FROM main WHERE id = ANY(:ids)`. Batched in chunks of 1000.
+- `service/RetentionService.archiveOlderThan(Duration)` — single transaction: `INSERT INTO archive (...) SELECT ... FROM main WHERE occurred_at < :cutoff AND NOT EXISTS (...) RETURNING id`. Batched in chunks of 1000 and idempotent across repeated runs (already-archived rows are skipped).
 - `service/RetentionScheduler` — schedule pulled from configuration, not hardcoded:
   - `@Scheduled(cron = "${auditlog.retention.cron:0 0 3 * * *}", zone = "${auditlog.retention.zone:UTC}")`
   - calls service with `Duration.ofDays(properties.retention().days())`.
@@ -263,14 +262,18 @@ Small commit on top of A:
   ```
   Document that `cron` follows Spring's 6-field syntax (`second minute hour day-of-month month day-of-week`).
 - Enable scheduling on the application class with `@EnableScheduling`.
-- Integration test: insert events with manipulated `occurred_at`, invoke `RetentionService` directly (don't wait for cron), assert main has young rows only and archive has old rows. A second IT covers the property override path: set `auditlog.retention.cron=...` via `@DynamicPropertySource`, boot the context, and assert the resolved schedule on the registered `ScheduledTask` (or accept an alternative expression and verify no startup failure).
-- Code comment at the DELETE call referencing the "no DELETE" invariant and explaining the carve-out for retention.
+- New migration `V3__block_audit_event_deletes.sql` — `CREATE RULE audit_events_no_delete AS ON DELETE TO audit_events DO INSTEAD NOTHING;`.
+- Integration test: insert events with manipulated `occurred_at`, invoke `RetentionService` directly (don't wait for cron), assert old rows are copied into archive and still remain in main. Add an idempotency assertion that a second run inserts nothing new. A second IT covers the property override path: set `auditlog.retention.cron=...` via `@DynamicPropertySource`, boot the context, and assert the resolved schedule on the registered `ScheduledTask` (or accept an alternative expression and verify no startup failure).
+
+**Result (2026-05-05):** Done. Added `V2__create_audit_events_archive.sql`, archive entity/repository, `RetentionService`, `RetentionScheduler`, `@EnableScheduling`, retention config fields (`days`, `cron`, `zone`) with constructor validation, and `V3__block_audit_event_deletes.sql` to block DELETE at the DB layer. Retention is now copy-only and idempotent: eligible rows are archived into `audit_events_archive`, source rows remain in `audit_events`, and repeated runs skip already-archived rows. README now documents the strict append-only semantics and archive behavior.
+
+**Result (2026-05-05, verification):** Added `RetentionServiceIT`, `RetentionSchedulerPropertiesIT`, `RetentionServiceTest`, `RetentionSchedulerTest`, `AuditEventArchiveEntityTest`, `AuditLogPropertiesTest`, and focused coverage tests for existing uncovered branches (`GlobalExceptionHandlerTest`, extra `AuditEventServiceTest` case). Phase C also exposed a pre-existing test-isolation bug: `AuditEventImmutabilityIT` was using a raw JDBC connection outside Spring's transaction management, leaking rows across ITs; switched it to `DataSourceUtils` so rollback works again. `JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew build` is green, including Testcontainers ITs, Spotless, and the JaCoCo ≥ 90% gate. No follow-up.
 
 ## Phase D — Stretch: hash chain (defer; do not implement now)
 
 Sketch only, for later:
 
-- `V3__add_hash_chain.sql` adds `previous_hash BYTEA`, `event_hash BYTEA NOT NULL`.
+- `V4__add_hash_chain.sql` adds `previous_hash BYTEA`, `event_hash BYTEA NOT NULL`.
 - `service/HashChainService` computes `event_hash = SHA-256(previous_hash || canonical_payload)`. Single global chain; on write, fetch current tail under `SELECT ... FOR UPDATE` to serialize.
 - `GET /audit-events/integrity` recomputes and reports breakage.
 - Skip until phases A–C are green; treat as a separate ticket.
@@ -318,7 +321,7 @@ src/integrationTest/java/com/training/bartosh/auditlog/persistence/AuditEventImm
 src/integrationTest/java/com/training/bartosh/auditlog/persistence/FlywayMigrationIT.java
 ```
 
-Phase C adds `V2__create_audit_events_archive.sql`, `service/RetentionService.java`, `service/RetentionScheduler.java`, plus a retention IT (under `src/integrationTest/java/...`).
+Phase C adds `V2__create_audit_events_archive.sql`, `V3__block_audit_event_deletes.sql`, `service/RetentionService.java`, `service/RetentionScheduler.java`, plus retention/unit tests under `src/integrationTest/java/...` and `src/test/java/...`.
 
 ## Verification (the build-health gate from agents.md)
 

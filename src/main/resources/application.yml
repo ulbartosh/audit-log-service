@@ -30,3 +30,6 @@ springdoc:
 auditlog:
   retention:
     days: 365
+    # 6-field Spring cron: second minute hour day-of-month month day-of-week
+    cron: "0 0 3 * * *"
+    zone: "UTC"
