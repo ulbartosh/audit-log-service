@@ -97,7 +97,7 @@ Response: `200 OK` with
 
 ### Invariants
 
-- **Append-only.** No `UPDATE` or `DELETE` is exposed by the API; the database enforces a `DO INSTEAD NOTHING` rule on `UPDATE`. Regression-tested by `AuditEventImmutabilityIT`.
+- **Append-only API surface and storage.** No `UPDATE` or `DELETE` is exposed by the API, and the database blocks both operations on `audit_events` with `DO INSTEAD NOTHING` rules. Retention copies expired rows into `audit_events_archive` but leaves the source rows intact. Regression-tested by `AuditEventImmutabilityIT`.
 - **Server-set timestamp.** Any client-supplied `occurredAt` / `timestamp` is silently dropped on POST.
 - **Error response shape.** Every error body has the form `{"errors":[{"field"?,"message"}]}`. Field-level validation errors include `field`; other failures emit a single `{"message"}` object.
 
@@ -131,6 +131,18 @@ AUDITLOG_DATASOURCE_URL=jdbc:postgresql://localhost:55432/auditlog \
 ```
 
 Datasource defaults (when env vars are unset) are `jdbc:postgresql://localhost:5432/auditlog` / `auditlog` / `auditlog`. Override `AUDITLOG_DATASOURCE_{URL,USERNAME,PASSWORD}` to point at any other Postgres.
+
+### Retention
+
+Old events are copied into `audit_events_archive` once they pass the retention threshold. The source rows remain in `audit_events`, so archival is additive and fully append-only. Defaults:
+
+| Property | Default | Notes |
+| --- | --- | --- |
+| `auditlog.retention.days` | `365` | Events older than this are copied into the archive table |
+| `auditlog.retention.cron` | `0 0 3 * * *` | Spring 6-field cron: `second minute hour day-of-month month day-of-week` |
+| `auditlog.retention.zone` | `UTC` | Time zone used by the scheduler |
+
+The retention job is internal-only, idempotent, and keeps the REST API plus the primary audit table append-only.
 
 ### Tests and gate
 

@@ -20,6 +20,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @ExtendWith(MockitoExtension.class)
 class AuditEventServiceTest {
@@ -68,5 +73,22 @@ class AuditEventServiceTest {
     assertEquals("u1", persisted.getActor());
     assertEquals("project:42", persisted.getResource());
     verify(repository).save(any(AuditEventEntity.class));
+  }
+
+  @Test
+  void searchPreservesCallerSortWhenAlreadySpecified() {
+    ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+    when(repository.findAll(specification(), pageableCaptor.capture()))
+        .thenReturn(Page.empty(PageRequest.of(0, 10, Sort.by("actor"))));
+
+    service.search(
+        new SearchQuery(null, null, null, null), PageRequest.of(0, 10, Sort.by("actor")));
+
+    assertEquals(Sort.by("actor"), pageableCaptor.getValue().getSort());
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Specification<AuditEventEntity> specification() {
+    return any(Specification.class);
   }
 }
