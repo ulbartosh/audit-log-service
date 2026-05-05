@@ -122,6 +122,18 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
         .andExpect(jsonPath("$.total", equalTo(3)));
   }
 
+  @Test
+  void nullableFieldsOmittedFromResponse() throws Exception {
+    String body = """
+        {"actor":"u1","action":"user.login","outcome":"SUCCESS"}
+        """;
+
+    mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.resource").doesNotExist())
+        .andExpect(jsonPath("$.context").doesNotExist());
+  }
+
   private void seed(String actor, String action, String outcome) throws Exception {
     seed(actor, action, outcome, null);
   }
