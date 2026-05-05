@@ -242,6 +242,8 @@ Small commit on top of A:
 - Add `@JsonInclude(NON_NULL)` to responses.
 - Tests for each new error path.
 
+**Result (2026-05-05):** Pagination ceiling and unified error shape were already done during Phase A PR review cycles. The only remaining item was `@JsonInclude(JsonInclude.Include.NON_NULL)` on `AuditEventResponse` (nullable fields: `resource`, `context`). Added the annotation and a new IT `nullableFieldsOmittedFromResponse()` asserting those keys are absent when null. `./gradlew build` green: 33 tests across 7 suites, coverage above 90% gate. No follow-up.
+
 ## Phase C — Retention
 
 - New migration `V2__create_audit_events_archive.sql` — `audit_events_archive` (same columns + `archived_at TIMESTAMPTZ NOT NULL DEFAULT now()`).
