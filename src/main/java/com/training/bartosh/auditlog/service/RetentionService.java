@@ -1,12 +1,9 @@
 package com.training.bartosh.auditlog.service;
 
-import jakarta.persistence.EntityManager;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -46,18 +43,14 @@ public class RetentionService {
       ORDER BY occurred_at ASC
       LIMIT :batchSize
       ON CONFLICT (id) DO NOTHING
-      RETURNING id
       """;
 
   private final Clock clock;
   private final NamedParameterJdbcTemplate jdbcTemplate;
-  private final EntityManager entityManager;
 
-  public RetentionService(
-      Clock clock, NamedParameterJdbcTemplate jdbcTemplate, EntityManager entityManager) {
+  public RetentionService(Clock clock, NamedParameterJdbcTemplate jdbcTemplate) {
     this.clock = clock;
     this.jdbcTemplate = jdbcTemplate;
-    this.entityManager = entityManager;
   }
 
   @Transactional
@@ -68,23 +61,19 @@ public class RetentionService {
     int total = 0;
 
     while (true) {
-      List<UUID> ids =
-          jdbcTemplate.query(
+      int archived =
+          jdbcTemplate.update(
               INSERT_ARCHIVE_BATCH_SQL,
               new MapSqlParameterSource()
                   .addValue("cutoff", Timestamp.from(cutoff))
                   .addValue("archivedAt", Timestamp.from(archivedAt))
-                  .addValue("batchSize", BATCH_SIZE),
-              (rs, rowNum) -> rs.getObject("id", UUID.class));
-      if (ids.isEmpty()) {
+                  .addValue("batchSize", BATCH_SIZE));
+      if (archived == 0) {
         return total;
       }
 
-      // Native INSERT ... SELECT bypasses the persistence context; clear it so same-transaction
-      // repository reads in tests and follow-on code observe the DB's post-archive state.
-      entityManager.clear();
-      total += ids.size();
-      if (ids.size() < BATCH_SIZE) {
+      total += archived;
+      if (archived < BATCH_SIZE) {
         return total;
       }
     }

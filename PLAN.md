@@ -353,6 +353,17 @@ CI staging note: split `./gradlew test` and `./gradlew integrationTest` into sep
 
 Reverse-chronological log of PR review comments that have been addressed and resolved on GitHub. Per `agents.md` PR invariant #1 (review comments addressed and threads resolved in the same change as the fix). This is **not** a numbered phase step — it tracks an ongoing review process across the lifetime of a PR.
 
+### PR #6 — `feat/phase-c-retention` (2026-05-05)
+
+Reviewer: `gemini-code-assist`. Four threads, addressed in this round and to be resolved on GitHub after the fix is pushed.
+
+| # | File | Comment summary | Fix | Thread |
+| --- | --- | --- | --- | --- |
+| 1 | `service/RetentionService.java` | `RETURNING id` is unnecessary once the service uses `jdbcTemplate.update()`. | Switched the archival SQL execution from `query(... RowMapper<UUID>)` to `update(...)`, removed `RETURNING id`, and used the affected-row count to drive batching. | pending push + resolve |
+| 2 | `service/RetentionService.java` | `EntityManager.clear()` is a blunt side effect and the dependency can be removed. | Removed the `EntityManager` field and constructor dependency; the copy-only archival path no longer clears the persistence context. | pending push + resolve |
+| 3 | `service/RetentionService.java` | `update()` is more efficient than `query()` for this batch insert. | Same refactor as above: `jdbcTemplate.update()` now handles the archival SQL directly and the loop uses the update count for continuation/termination. | pending push + resolve |
+| 4 | `service/RetentionServiceTest.java` | Unit tests should mock `jdbcTemplate.update()` after the service refactor. | Updated `RetentionServiceTest` to stub `update(...)` counts instead of `query(...)`, and simplified the expectations accordingly. | pending push + resolve |
+
 ### PR #2 — `docs/agents-pr-invariant-one-step-one-pr` (2026-04-28)
 
 Reviewer: `gemini-code-assist`. One thread, addressed in commit `6c0f9c3` and resolved on GitHub.
