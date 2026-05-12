@@ -29,7 +29,7 @@ Request parameters:
 | `from` | ISO-8601 instant | no | Inclusive lower bound on `occurred_at`. |
 | `to` | ISO-8601 instant | no | Inclusive upper bound on `occurred_at`. |
 | `pageToken` | string (opaque) | no | Continuation token from the previous response. Absent ⇒ first page. |
-| `size` | int | no | Default `50`. Silently capped at `500`. |
+| `size` | int | no | Default `50`. Must be >= 1; values above `500` are silently capped. |
 
 Response (replaces today's `PagedResponse<T>` for this endpoint):
 
@@ -60,7 +60,7 @@ Response (replaces today's `PagedResponse<T>` for this endpoint):
 | Code | When |
 |---|---|
 | `200 OK` | Success, including empty result sets. |
-| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `actor`/`resource`; malformed or unsupported-version `pageToken`. |
+| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `actor`/`resource`; invalid `size`; malformed or unsupported-version `pageToken`. |
 | `500 Internal Server Error` | Unexpected failure. Opaque body, full stack to log. |
 
 ### Changes to existing `POST /audit-events`
@@ -71,7 +71,7 @@ Field-level changes:
 
 | Field | Before | After |
 |---|---|---|
-| `actor` | `String` (e.g. `"u_42"`) | `ActorRequest { id, type? }` — `id` required (`@NotBlank`); `type` optional, defaults to `USER` (defaulting done in the service, not the DTO). |
+| `actor` | `String` (e.g. `"u_42"`) | `ActorRequest { id, type? }` — `id` required (`@NotBlank`); `type` optional, defaults to `USER`. Defaulting happens while mapping the request into the domain model, not as a DTO field initializer; the service receives a domain `Actor` with a non-null type. |
 | `resource` | `String` (e.g. `"order/9f3b…"`) | `ResourceRequest { id, type? }` — object optional (matches the existing nullable column); when present, `id` is required (`@NotBlank`) and `type` is optional, free-form non-blank string if provided. |
 | `payload` | — (did not exist) | Optional JSON object. |
 
@@ -168,7 +168,7 @@ None. Per resolution #8, the table is empty.
 | `to` | If present, must parse as ISO-8601 instant. → `400` on parse failure. |
 | `from` + `to` | If both present, `from` must not be after `to`. → `400`. |
 | `pageToken` | If present, must base64-url decode to JSON with `v == 1`, an ISO-8601 `occurredAt`, and a UUID `id`. → `400` otherwise. |
-| `size` | Integer ≥ 1; default `50`; silently capped at `500` (no error). |
+| `size` | Integer >= 1; default `50`; values above `500` are silently capped at `500`; values below `1` return `400`; non-integer values return `400` with `field = "size"`. |
 
 ### `POST /audit-events` — new/changed fields only
 
