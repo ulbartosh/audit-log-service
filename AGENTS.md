@@ -87,9 +87,25 @@ If any step fails, fix the root cause. Do not bypass with `--no-verify`, `@Disab
 A PR is the unit of merge into `main`. These rules apply on top of the build-health invariants above and govern the review process itself.
 
 1. PR review comments are addressed in the same change that fixes them, and the corresponding GitHub review thread is marked **resolved** once the fix is pushed. A push that responds to a comment but leaves the thread open is incomplete.
-2. **One PLAN.md step, one branch, one PR.** Every new numbered step in `PLAN.md` lands on its own feature branch and is merged through its own PR. Steps must not be combined on a single branch — small, focused PRs make review, revert, and bisection tractable. Branch naming: `feat/<step-id>-<short-slug>` (e.g. `feat/phase-c-retention`, `feat/b1-pagination-cap`). Mid-PR review fixes for the same step stay on the same branch.
+2. **One task, one branch, one PR.** Every numbered task — whether it lives in repo-root `PLAN.md` or in a spec's `tasks.md` (see `.specs/SPEC_WORKFLOW.md`) — lands on its own feature branch and is merged through its own PR. Tasks must not be combined on a single branch — small, focused PRs make review, revert, and bisection tractable. **Branch naming:** `<feature-name>/t<task-number>-<short-name-of-task>`, where `<feature-name>` is the spec folder name (for spec-tracked work) or a short slug for the feature (for `PLAN.md`-tracked work), and `<task-number>` is the zero-padded task ID from `tasks.md` / `PLAN.md`. Examples: `query-api/t02-structured-shape`, `retention-archive/t01-v4-migration`. Mid-PR review fixes for the same task stay on the same branch.
 3. Before creating a new feature branch, **fetch and fast-forward `main` first** (`git fetch origin && git checkout main && git pull --ff-only`), then branch from the up-to-date tip. Branching from a stale `main` produces accidental rebase noise and conflicts that the squash-merge of the previous PR has already resolved.
 4. Keep `README.md` fresh in the same PR whenever user-facing or operator-facing behavior changes. At minimum, update README when the API contract, quickstart/run flow, ports/URLs, required env vars, local test/build commands, hooks, CI-visible verification flow, or key documentation entry points change. If a code change genuinely needs no README update, say so explicitly in the PR/PLAN context.
+5. **Spec acceptance criteria are satisfied before merge.** When a PR implements work tracked in `.specs/<problem-name>/`, every acceptance criterion in that spec's `requirements.md` must be (a) implemented and (b) covered by at least one test that would fail if the AC were violated. The PR description should map each AC to the test(s) that exercise it. If an AC is intentionally deferred, mark it explicitly in the PR and in the spec, with a follow-up reference; do not silently skip.
+
+## Clarifying questions (before any non-trivial work)
+
+Before drafting anything substantial — code, specs, plans, designs, docs, migrations, configuration, non-trivial refactors — ask 5–7 short clarifying questions about the decisions you would otherwise make by default. One decision = one question. If you have no real doubt about a particular choice, do not invent a question for it. Do not start writing until the user answers.
+
+Scope:
+
+- **Applies to:** new features, new files, new specs/designs/plans, schema or migration changes, architectural choices, behavior changes, anything where a reasonable person might choose differently than your default.
+- **Does not apply to:** trivial edits the user has already specified (typo fixes, literal rename, an explicit one-line change), formatting, or carrying out an instruction the user has already pinned down.
+
+When in doubt, ask. Cost of asking is low; cost of writing the wrong thing is high.
+
+## Working with specifications
+
+New problems are planned under `.specs/<problem-name>/` before any code is written. The workflow — folder layout and the `requirements.md` → `design.md` → `tasks.md` progression — lives in [`.specs/SPEC_WORKFLOW.md`](.specs/SPEC_WORKFLOW.md). Read it before drafting or editing any file under `.specs/`. The 5–7 clarifying-questions ritual (see section above) applies before every spec document.
 
 ## Working with PLAN.md
 
