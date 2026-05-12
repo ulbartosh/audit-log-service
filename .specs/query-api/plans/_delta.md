@@ -6,25 +6,34 @@ Compared:
 - `design.md`
 - `plans/T01-plan.md` through `plans/T07-plan.md`
 
-## Material deltas
+## Status
+
+The deltas previously recorded in this file have been resolved by clarifying the specification and tightening the task plans:
+
+- `design.md` now says `actor.type` defaulting happens while mapping the request into the domain model, not as a DTO field initializer.
+- `design.md` now distinguishes `size > 500` (silently capped) from `size < 1` and non-integer `size` (both `400`).
+- `T07-plan.md` and `tasks.md` now explicitly require blank-`resource` and invalid-`size` GET tests.
+- `T02-plan.md` and `tasks.md` now explicitly require a blank-`resource.type` POST test.
+
+## Resolved material deltas
 
 ### 1. `actor.type` defaulting layer differs
 
-**Spec:** `design.md` says the new POST `actor.type` field is optional and defaults to `USER`, with defaulting "done in the service, not the DTO."
+**Previous spec:** `design.md` said the new POST `actor.type` field is optional and defaults to `USER`, with defaulting "done in the service, not the DTO."
 
-**Plan:** `T02-plan.md` explicitly resolves this to defaulting in `AuditEventController.create(...)` while mapping `ActorRequest` to the domain `Actor`. The plan explains this as "controller boundary" defaulting because the service cannot import controller DTOs under the layered architecture rules.
+**Resolution:** `design.md` now says defaulting happens while mapping the request into the domain model, not as a DTO field initializer. This matches the T02 plan while preserving the domain invariant that service code receives `Actor.type` as non-null.
 
-**Impact:** Wire behavior is the same, but ownership differs from the design wording. Resolve by either updating `design.md` to say "defaulting at the application/controller boundary, not in the DTO" or changing the T02 plan to introduce a service-level input shape/factory where the default can live without importing controller DTOs.
+**Outstanding action:** None.
 
 ### 2. `size <= 0` behavior differs
 
-**Spec:** `design.md` validation rules say `size` is an integer `>= 1`, defaults to `50`, and is silently capped at `500`.
+**Previous spec:** `design.md` validation rules said `size` is an integer `>= 1`, defaults to `50`, and is silently capped at `500`.
 
-**Plan:** `T07-plan.md` clamps the HTTP request value with `Math.min(Math.max(size, 1), MAX_PAGE_SIZE)`. That means `size=0` or `size=-5` becomes `1` and returns `200 OK`, rather than being rejected.
+**Resolution:** `design.md` now states that values above `500` are capped, values below `1` return `400`, and non-integer `size` returns `400` with `field = "size"`. `T07-plan.md` now rejects lower-bound violations instead of clamping them.
 
-**Impact:** Clients sending invalid lower-bound sizes receive a successful response instead of the spec-implied `400 Bad Request`. Resolve by either changing the controller plan to reject `size < 1`, or changing `design.md` to explicitly say lower-bound sizes are also silently clamped to `1`.
+**Outstanding action:** None.
 
-## Coverage gaps
+## Resolved coverage gaps
 
 ### 3. GET blank `resource` is not explicitly tested
 
@@ -32,7 +41,7 @@ Compared:
 
 **Plan:** `T07-plan.md` implements both checks in `SearchQuery`, but the listed controller ITs only include `getRejectsBlankActor`. There is no matching `getRejectsBlankResource` test.
 
-**Impact:** The planned implementation appears to satisfy the behavior, but the DoD does not explicitly verify the `resource` half of the spec rule.
+**Resolution:** `T07-plan.md` and `tasks.md` now require `getRejectsBlankResource`.
 
 ### 4. POST blank `resource.type` is not explicitly tested
 
@@ -40,7 +49,7 @@ Compared:
 
 **Plan:** `T02-plan.md` routes request data through the domain `Resource` compact constructor, which rejects blank `type`, but the listed integration tests cover blank `actor.id` and blank `resource.id` only. There is no explicit blank `resource.type` test.
 
-**Impact:** The behavior is likely enforced indirectly, but the DoD does not explicitly lock the validation rule from the design.
+**Resolution:** `T02-plan.md` and `tasks.md` now require `postRejectsResourceTypeBlankWhenResourcePresent`.
 
 ## Non-deltas noted
 

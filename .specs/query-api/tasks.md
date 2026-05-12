@@ -70,7 +70,7 @@ _(append after merge)_
 - `domain/`: new `ActorType` enum (`USER` only), records `Actor(String id, ActorType type)` and `Resource(String id, String type)` with compact-ctor invariants from [`design.md` § Layer integration → domain/](./design.md#layer-integration). Update `AuditEvent` and `NewAuditEvent` to use `Actor` / `Resource` and add `JsonNode payload`.
 - `persistence/`: `AuditEventEntity` + `AuditEventArchiveEntity` gain `actorType`, `resourceType`, `payload` fields (annotations per design). `AuditEventMapper` reads/writes the new fields per [`design.md` § Layer integration → persistence/](./design.md#layer-integration).
 - `controller/dto/`: new `ActorRequest`, `ActorResponse`, `ResourceRequest`, `ResourceResponse`. `CreateAuditEventRequest` and `AuditEventResponse` swap to the new shapes; `payload` added to both with `@JsonInclude(NON_NULL)` on the response.
-- `controller/AuditEventController.create(...)`: defaults `actor.type` to `USER` when omitted (defaulting in the service or controller, not the DTO — per design.md note).
+- `controller/AuditEventController.create(...)`: defaults `actor.type` to `USER` when omitted while mapping the request into the domain model; do not implement the default as a DTO field initializer.
 - Service: `record(...)` propagates the new fields. `search(...)` continues to use offset paging in this step.
 
 **Definition of Done**
@@ -78,6 +78,7 @@ _(append after merge)_
 - Domain unit tests: `Actor` rejects null/blank `id` and null `type`; `Resource` rejects null/blank `id`, accepts null `type`, rejects blank `type` when non-null.
 - POST integration test: posting `actor: { id, type }` + `resource: { id, type }` + `payload` round-trips through DB and is returned by GET with the same structured shape — covers `compliance/actor-structured`, `compliance/resource-structured`, `sre/payload-present`.
 - POST integration test: `actor.type` omitted defaults to `USER` on read-back.
+- POST integration test: `resource.type` present but blank returns `400`.
 - GET integration test asserts the JSON keys `payload` and `context` are **absent** (not present-as-null) when the stored event has them null — covers `sre/payload-absent`, `sre/context-absent`.
 - ArchUnit boundary tests still pass (no new `org.springframework.*` / `jakarta.persistence.*` imports in `domain/`).
 - README updated if the POST/GET examples in it change (`AGENTS.md` § PR invariant #4).
@@ -207,7 +208,7 @@ _(append after merge)_
 **Scope**
 - `service/SearchQuery` — replace `int page, int size` with `Optional<Cursor> cursor, int size`.
 - `service/AuditEventService.search(...)` — return `KeysetPage<AuditEvent>`. Build `Specification` from filters; if `cursor` present, compose with `afterCursor`. Sort by `(occurred_at DESC, id DESC)`. Fetch via `PageRequest.of(0, size + 1)`. If `result.size() > size`, drop the extra row and set `nextCursor = Optional.of(new Cursor(lastInRange.occurredAt(), lastInRange.id()))`; otherwise `Optional.empty()`.
-- `controller/AuditEventController.search(...)` — replace `page` / `size` params with `Optional<String> pageToken` + `@RequestParam(defaultValue = "50") int size`. Decode/encode via `PageTokenCodec`. Cap `size` at 500 (silent). Return `KeysetPageResponse<AuditEventResponse>`.
+- `controller/AuditEventController.search(...)` — replace `page` / `size` params with `Optional<String> pageToken` + `@RequestParam(defaultValue = "50") int size`. Decode/encode via `PageTokenCodec`. Reject `size < 1`; silently cap `size > 500`. Return `KeysetPageResponse<AuditEventResponse>`.
 - `controller/dto/PagedResponse.java` — **delete**. If any other production caller still imports it, leave it and document why in the PR description (no other caller exists at the time this spec was written; verify with `rg` before deleting).
 - Update README and any quickstart examples that show offset paging on `GET /audit-events`.
 
@@ -216,6 +217,7 @@ _(append after merge)_
 - Integration tests added alongside `AuditEventControllerIT` under `src/integrationTest/java/com/training/bartosh/auditlog/controller/`:
   - **`compliance/empty-result`** — GET with filters matching zero rows → `200`, body `items: []`, JSON has no `nextPageToken` key.
   - **`compliance/from-after-to`** — already covered for `400`; re-run under keyset to confirm shape preserved.
+  - **GET validation** — blank `resource` returns `400`; `size < 1` and non-integer `size` return `400`.
   - **`sre/order-desc`** — seed N rows with mixed `occurredAt`/`id`; GET returns them strictly newest-first.
   - **`analyst/pagination`** — seed > `size` rows, walk pages via `nextPageToken`, assert union equals seeded set with no duplicates.
   - **`analyst/cap-500`** — request `size=10000` → response carries at most 500 items; no error.

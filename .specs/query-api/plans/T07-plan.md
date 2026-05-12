@@ -142,7 +142,10 @@ public KeysetPageResponse<AuditEventResponse> search(
     @RequestParam(required = false) Optional<String> pageToken,
     @RequestParam(defaultValue = "50") int size) {
 
-  int cappedSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+  if (size < 1) {
+    throw new IllegalArgumentException("size must be >= 1");
+  }
+  int cappedSize = Math.min(size, MAX_PAGE_SIZE);
   Optional<Cursor> cursor = pageToken.map(pageTokenCodec::decode);  // throws InvalidPageTokenException
   KeysetPage<AuditEvent> result =
       service.search(new SearchQuery(actor, resource, from, to, cursor, cappedSize));
@@ -155,7 +158,7 @@ public KeysetPageResponse<AuditEventResponse> search(
 
 `pageTokenCodec` is the bean introduced in T05. The controller field is injected via constructor alongside the existing `AuditEventService`.
 
-`size` is silently clamped (no `400` for over-large requests, per `analyst/cap-500`). Negative or zero `size` gets clamped to `1`. `pageToken.map(codec::decode)` propagates `InvalidPageTokenException` for `400` via the handler T05 installed.
+`size` is silently capped only on the upper bound (no `400` for over-large requests, per `analyst/cap-500`). Negative or zero `size` is invalid and returns `400`; non-integer `size` is handled by `handleTypeMismatch(...)` and returns `400` with `field = "size"`. `pageToken.map(codec::decode)` propagates `InvalidPageTokenException` for `400` via the handler T05 installed.
 
 ## `GlobalExceptionHandler` — `handleTypeMismatch` override
 
@@ -206,6 +209,8 @@ These three pin the slicing logic at the unit boundary; the rest of the keyset b
 | `getRejectsMalformedFrom` | `compliance/from-malformed` | `?from=not-a-date` → `400`, `errors[*].field == "from"`. |
 | `getRejectsMalformedTo` | `compliance/to-malformed` | `?to=not-a-date` → `400`, `errors[*].field == "to"`. |
 | `getRejectsBlankActor` | implied by design.md validation | `?actor=` or `?actor=%20` → `400`. |
+| `getRejectsBlankResource` | implied by design.md validation | `?resource=` or `?resource=%20` → `400`. |
+| `getRejectsInvalidSize` | implied by design.md validation | `?size=0`, `?size=-1`, and `?size=abc` → `400`; non-integer case has `errors[*].field == "size"`. |
 | `getReturnsEventsMostRecentFirst` | `sre/order-desc` | Seed three rows at T0, T1, T2 (with distinct fixed clocks); GET returns them T2 → T1 → T0. |
 | `getWalksMultiplePages` | `analyst/pagination` | Seed > size rows; iterate pages via `nextPageToken`; assert union equals seeded set, no duplicates, no missing rows. |
 | `getCapsSizeAt500EvenWhenLarger` | `analyst/cap-500` | `?size=10000` → response has at most 500 items; no error. Easiest: seed 600 rows (acceptable in IT runtime), then assert `$.items.length() == 500` and `$.nextPageToken` is present. |
@@ -233,7 +238,7 @@ Search events. All filters optional; results sorted by `(occurredAt DESC, id DES
 | `from` | ISO-8601 instant | — | Inclusive lower bound on `occurredAt`. |
 | `to` | ISO-8601 instant | — | Inclusive upper bound on `occurredAt`. |
 | `pageToken` | string (opaque) | — | Continuation token from a previous response. Absent ⇒ first page. |
-| `size` | int | 50 | Silently capped at 500. |
+| `size` | int | 50 | Must be >= 1; silently capped at 500. |
 
 Response: `200 OK` with
 
@@ -255,11 +260,12 @@ Mirrors `tasks.md` T07 DoD, made concrete:
 
 - [ ] `./gradlew build` exits 0 (compile + test + integrationTest + spotlessCheck + jacoco verify ≥ 90% line).
 - [ ] `./gradlew test --tests "*AuditEventServiceTest"` passes — three new keyset-slicing unit tests green; the deleted offset test is gone.
-- [ ] `./gradlew integrationTest --tests "*AuditEventControllerIT"` passes — all 11 new/updated IT methods green:
+- [ ] `./gradlew integrationTest --tests "*AuditEventControllerIT"` passes — all 13 new/updated IT methods green:
   - `getReturnsEmptyResultWith200AndNoNextPageToken`
   - `getRejectsFromAfterTo`
   - `getRejectsMalformedFrom`, `getRejectsMalformedTo`
-  - `getRejectsBlankActor`
+  - `getRejectsBlankActor`, `getRejectsBlankResource`
+  - `getRejectsInvalidSize`
   - `getReturnsEventsMostRecentFirst`
   - `getWalksMultiplePages`
   - `getCapsSizeAt500EvenWhenLarger`

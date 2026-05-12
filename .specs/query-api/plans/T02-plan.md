@@ -307,6 +307,7 @@ private void seed(String actor, String action, String outcome, String resourceId
 - `postDefaultsActorTypeToUser` — body has `{"actor":{"id":"u1"},"action":"…","outcome":"SUCCESS"}`; assert `$.actor.type == "USER"` on the response.
 - `postRejectsActorIdBlank` — body has `{"actor":{"id":"  "},…}`; assert `400` and `errors[*].field == "actor.id"` (Spring flattens nested field errors per `GlobalExceptionHandler.handleMethodArgumentNotValid`).
 - `postRejectsResourceIdBlankWhenResourcePresent` — body has `{"actor":{"id":"u1"},"resource":{"id":""},…}`; assert `400` and `errors[*].field == "resource.id"`.
+- `postRejectsResourceTypeBlankWhenResourcePresent` — body has `{"actor":{"id":"u1"},"resource":{"id":"project:42","type":"  "},…}`; assert `400` and an error message indicating `resource.type` must be non-blank when present.
 
 ## README updates
 
@@ -326,7 +327,7 @@ Mirrors `tasks.md` T02 DoD, made concrete:
 - [ ] `./gradlew build` exits 0 (compile + test + integrationTest + spotlessCheck + jacoco verify ≥ 90% line).
 - [ ] `./gradlew test --tests "*.domain.*"` passes — including new `Actor`/`Resource` compact-ctor cases and `payload` round-trips.
 - [ ] `./gradlew test --tests "*AuditEventServiceTest"` passes — four updated tests green.
-- [ ] `./gradlew integrationTest --tests "*AuditEventControllerIT"` passes — including: `postRoundTripsStructuredActorAndResourceAndPayload`, `postDefaultsActorTypeToUser`, `postRejectsActorIdBlank`, `postRejectsResourceIdBlankWhenResourcePresent`, updated `nullableFieldsOmittedFromResponse` (with `payload` absent assertion).
+- [ ] `./gradlew integrationTest --tests "*AuditEventControllerIT"` passes — including: `postRoundTripsStructuredActorAndResourceAndPayload`, `postDefaultsActorTypeToUser`, `postRejectsActorIdBlank`, `postRejectsResourceIdBlankWhenResourcePresent`, `postRejectsResourceTypeBlankWhenResourcePresent`, updated `nullableFieldsOmittedFromResponse` (with `payload` absent assertion).
 - [ ] `./gradlew test --tests "*ArchitectureTest"` passes — the four ArchUnit rules continue to hold (no Spring/JPA imports in `domain/`; controller doesn't import `persistence/`).
 - [ ] No new compiler warnings; spotless clean; no `TODO` without an issue reference; no `System.out.println`.
 - [ ] README's POST/GET examples, curl smoke test, and event-schema table reflect the new shape (verified by re-reading after edit).
