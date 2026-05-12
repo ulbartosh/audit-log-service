@@ -3,10 +3,15 @@ package com.training.bartosh.auditlog.domain;
 import com.fasterxml.jackson.databind.JsonNode;
 
 public record NewAuditEvent(
-    String actor, String action, String resource, Outcome outcome, JsonNode context) {
+    Actor actor,
+    String action,
+    Resource resource,
+    Outcome outcome,
+    JsonNode context,
+    JsonNode payload) {
 
   public NewAuditEvent {
-    if (actor == null || actor.isBlank()) {
+    if (actor == null) {
       throw new IllegalArgumentException("actor is required");
     }
     if (action == null || action.isBlank()) {

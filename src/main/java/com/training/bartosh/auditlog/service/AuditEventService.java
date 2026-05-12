@@ -40,7 +40,8 @@ public class AuditEventService {
             input.action(),
             input.resource(),
             input.outcome(),
-            input.context());
+            input.context(),
+            input.payload());
     AuditEventEntity saved = repository.save(AuditEventMapper.toEntity(event));
     return AuditEventMapper.toDomain(saved);
   }

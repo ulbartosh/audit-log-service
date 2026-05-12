@@ -6,9 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.training.bartosh.auditlog.domain.Actor;
+import com.training.bartosh.auditlog.domain.ActorType;
 import com.training.bartosh.auditlog.domain.AuditEvent;
 import com.training.bartosh.auditlog.domain.NewAuditEvent;
 import com.training.bartosh.auditlog.domain.Outcome;
+import com.training.bartosh.auditlog.domain.Resource;
 import com.training.bartosh.auditlog.persistence.AuditEventEntity;
 import com.training.bartosh.auditlog.persistence.AuditEventRepository;
 import java.time.Clock;
@@ -30,6 +33,7 @@ import org.springframework.data.jpa.domain.Specification;
 class AuditEventServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-04-27T12:00:00Z");
+  private static final Actor ACTOR = new Actor("u1", ActorType.USER);
 
   @Mock private AuditEventRepository repository;
 
@@ -46,7 +50,7 @@ class AuditEventServiceTest {
     when(repository.save(any(AuditEventEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
     AuditEvent saved =
-        service.record(new NewAuditEvent("u1", "user.login", null, Outcome.SUCCESS, null));
+        service.record(new NewAuditEvent(ACTOR, "user.login", null, Outcome.SUCCESS, null, null));
 
     assertEquals(FIXED, saved.occurredAt());
   }
@@ -56,7 +60,7 @@ class AuditEventServiceTest {
     when(repository.save(any(AuditEventEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
     AuditEvent saved =
-        service.record(new NewAuditEvent("u1", "user.login", null, Outcome.SUCCESS, null));
+        service.record(new NewAuditEvent(ACTOR, "user.login", null, Outcome.SUCCESS, null, null));
 
     assertNotNull(saved.id());
   }
@@ -66,12 +70,16 @@ class AuditEventServiceTest {
     ArgumentCaptor<AuditEventEntity> captor = ArgumentCaptor.forClass(AuditEventEntity.class);
     when(repository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
-    service.record(new NewAuditEvent("u1", "user.login", "project:42", Outcome.SUCCESS, null));
+    Resource resource = new Resource("project:42", "project");
+
+    service.record(new NewAuditEvent(ACTOR, "user.login", resource, Outcome.SUCCESS, null, null));
 
     AuditEventEntity persisted = captor.getValue();
     assertEquals(FIXED, persisted.getOccurredAt());
     assertEquals("u1", persisted.getActor());
+    assertEquals(ActorType.USER, persisted.getActorType());
     assertEquals("project:42", persisted.getResource());
+    assertEquals("project", persisted.getResourceType());
     verify(repository).save(any(AuditEventEntity.class));
   }
 

@@ -1,6 +1,8 @@
 package com.training.bartosh.auditlog.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,18 +24,61 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
   void postCreatesEvent() throws Exception {
     String body =
         """
-        {"actor":"u1","action":"user.login","resource":"project:42","outcome":"SUCCESS"}
+        {
+          "actor": {"id": "u1", "type": "USER"},
+          "action": "user.login",
+          "resource": {"id": "project:42", "type": "project"},
+          "outcome": "SUCCESS"
+        }
         """;
 
     mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(header().exists("Location"))
-        .andExpect(jsonPath("$.actor", equalTo("u1")))
+        .andExpect(jsonPath("$.actor.id", equalTo("u1")))
+        .andExpect(jsonPath("$.actor.type", equalTo("USER")))
         .andExpect(jsonPath("$.action", equalTo("user.login")))
-        .andExpect(jsonPath("$.resource", equalTo("project:42")))
+        .andExpect(jsonPath("$.resource.id", equalTo("project:42")))
+        .andExpect(jsonPath("$.resource.type", equalTo("project")))
         .andExpect(jsonPath("$.outcome", equalTo("SUCCESS")))
         .andExpect(jsonPath("$.id").exists())
         .andExpect(jsonPath("$.occurredAt").exists());
+  }
+
+  @Test
+  void postRoundTripsStructuredActorAndResourceAndPayload() throws Exception {
+    String body =
+        """
+        {
+          "actor": {"id": "u1", "type": "USER"},
+          "action": "payment.refunded",
+          "resource": {"id": "order/42", "type": "order"},
+          "outcome": "SUCCESS",
+          "context": {"ip": "10.0.0.1"},
+          "payload": {"amount": 100}
+        }
+        """;
+
+    mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.actor.id", equalTo("u1")))
+        .andExpect(jsonPath("$.actor.type", equalTo("USER")))
+        .andExpect(jsonPath("$.resource.id", equalTo("order/42")))
+        .andExpect(jsonPath("$.resource.type", equalTo("order")))
+        .andExpect(jsonPath("$.context.ip", equalTo("10.0.0.1")))
+        .andExpect(jsonPath("$.payload.amount", equalTo(100)));
+  }
+
+  @Test
+  void postDefaultsActorTypeToUser() throws Exception {
+    String body =
+        """
+        {"actor":{"id":"u1"},"action":"user.login","outcome":"SUCCESS"}
+        """;
+
+    mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.actor.type", equalTo("USER")));
   }
 
   @Test
@@ -44,7 +89,48 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
 
     mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.errors").exists());
+        .andExpect(jsonPath("$.errors[*].field", hasItem("actor")));
+  }
+
+  @Test
+  void postRejectsActorIdBlank() throws Exception {
+    String body =
+        """
+        {"actor":{"id":"  "},"action":"user.login","outcome":"SUCCESS"}
+        """;
+
+    mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[*].field", hasItem("actor.id")));
+  }
+
+  @Test
+  void postRejectsResourceIdBlankWhenResourcePresent() throws Exception {
+    String body =
+        """
+        {"actor":{"id":"u1"},"action":"user.login","resource":{"id":""},"outcome":"SUCCESS"}
+        """;
+
+    mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[*].field", hasItem("resource.id")));
+  }
+
+  @Test
+  void postRejectsResourceTypeBlankWhenResourcePresent() throws Exception {
+    String body =
+        """
+        {
+          "actor": {"id": "u1"},
+          "action": "user.login",
+          "resource": {"id": "project:42", "type": "  "},
+          "outcome": "SUCCESS"
+        }
+        """;
+
+    mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].message", containsString("resource type")));
   }
 
   @Test
@@ -52,7 +138,13 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
     String pastTimestamp = "1999-01-01T00:00:00Z";
     String body =
         """
-        {"actor":"u1","action":"user.login","outcome":"SUCCESS","timestamp":"%s","occurredAt":"%s"}
+        {
+          "actor": {"id": "u1"},
+          "action": "user.login",
+          "outcome": "SUCCESS",
+          "timestamp": "%s",
+          "occurredAt": "%s"
+        }
         """
             .formatted(pastTimestamp, pastTimestamp);
 
@@ -64,7 +156,7 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
   @Test
   void postDefaultsOutcomeToSuccessWhenOmitted() throws Exception {
     String body = """
-        {"actor":"u1","action":"user.login"}
+        {"actor":{"id":"u1"},"action":"user.login"}
         """;
 
     mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -81,8 +173,8 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
     mvc.perform(get("/audit-events").param("actor", "alice"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.items", hasSize(2)))
-        .andExpect(jsonPath("$.items[0].actor", equalTo("alice")))
-        .andExpect(jsonPath("$.items[1].actor", equalTo("alice")));
+        .andExpect(jsonPath("$.items[0].actor.id", equalTo("alice")))
+        .andExpect(jsonPath("$.items[1].actor.id", equalTo("alice")));
   }
 
   @Test
@@ -93,7 +185,7 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
     mvc.perform(get("/audit-events").param("resource", "project:42"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.items", hasSize(1)))
-        .andExpect(jsonPath("$.items[0].resource", equalTo("project:42")));
+        .andExpect(jsonPath("$.items[0].resource.id", equalTo("project:42")));
   }
 
   @Test
@@ -124,14 +216,16 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
 
   @Test
   void nullableFieldsOmittedFromResponse() throws Exception {
-    String body = """
-        {"actor":"u1","action":"user.login","outcome":"SUCCESS"}
+    String body =
+        """
+        {"actor":{"id":"u1"},"action":"user.login","outcome":"SUCCESS"}
         """;
 
     mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.resource").doesNotExist())
-        .andExpect(jsonPath("$.context").doesNotExist());
+        .andExpect(jsonPath("$.context").doesNotExist())
+        .andExpect(jsonPath("$.payload").doesNotExist());
   }
 
   private void seed(String actor, String action, String outcome) throws Exception {
@@ -139,16 +233,13 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
   }
 
   private void seed(String actor, String action, String outcome, String resource) throws Exception {
+    String resourceFragment =
+        resource == null ? "" : ",\"resource\":{\"id\":\"%s\"}".formatted(resource);
     String body =
-        resource == null
-            ? """
-            {"actor":"%s","action":"%s","outcome":"%s"}
-            """
-                .formatted(actor, action, outcome)
-            : """
-            {"actor":"%s","action":"%s","outcome":"%s","resource":"%s"}
-            """
-                .formatted(actor, action, outcome, resource);
+        """
+        {"actor":{"id":"%s"},"action":"%s","outcome":"%s"%s}
+        """
+            .formatted(actor, action, outcome, resourceFragment);
     mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
         .andExpect(status().isCreated());
   }

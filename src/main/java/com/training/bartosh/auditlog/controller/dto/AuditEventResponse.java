@@ -11,20 +11,24 @@ import java.util.UUID;
 public record AuditEventResponse(
     UUID id,
     Instant occurredAt,
-    String actor,
+    ActorResponse actor,
     String action,
-    String resource,
+    ResourceResponse resource,
     Outcome outcome,
-    JsonNode context) {
+    JsonNode context,
+    JsonNode payload) {
 
   public static AuditEventResponse from(AuditEvent event) {
     return new AuditEventResponse(
         event.id(),
         event.occurredAt(),
-        event.actor(),
+        new ActorResponse(event.actor().id(), event.actor().type()),
         event.action(),
-        event.resource(),
+        event.resource() == null
+            ? null
+            : new ResourceResponse(event.resource().id(), event.resource().type()),
         event.outcome(),
-        event.context());
+        event.context(),
+        event.payload());
   }
 }

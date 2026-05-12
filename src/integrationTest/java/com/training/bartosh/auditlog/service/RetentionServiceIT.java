@@ -3,8 +3,11 @@ package com.training.bartosh.auditlog.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.training.bartosh.auditlog.AuditLogIntegrationTest;
 import com.training.bartosh.auditlog.config.AuditLogProperties;
+import com.training.bartosh.auditlog.domain.ActorType;
 import com.training.bartosh.auditlog.domain.Outcome;
 import com.training.bartosh.auditlog.persistence.AuditEventArchiveRepository;
 import com.training.bartosh.auditlog.persistence.AuditEventEntity;
@@ -42,8 +45,13 @@ class RetentionServiceIT extends AuditLogIntegrationTest {
     assertEquals(1, archived);
     assertEquals(2, auditEventRepository.count());
     assertEquals(1, archiveRepository.count());
-    assertEquals("actor-old", archiveRepository.findAll().get(0).getActor());
-    assertNotNull(archiveRepository.findAll().get(0).getArchivedAt());
+    var archivedEvent = archiveRepository.findAll().get(0);
+    assertEquals("actor-old", archivedEvent.getActor());
+    assertEquals(ActorType.USER, archivedEvent.getActorType());
+    assertEquals("project:42", archivedEvent.getResource());
+    assertEquals("project", archivedEvent.getResourceType());
+    assertEquals("archived", archivedEvent.getPayload().get("kind").asText());
+    assertNotNull(archivedEvent.getArchivedAt());
   }
 
   @Test
@@ -79,7 +87,17 @@ class RetentionServiceIT extends AuditLogIntegrationTest {
   }
 
   private static AuditEventEntity entity(String actor, Instant occurredAt) {
+    JsonNode payload = JsonNodeFactory.instance.objectNode().put("kind", "archived");
     return new AuditEventEntity(
-        UUID.randomUUID(), occurredAt, actor, "user.login", null, Outcome.SUCCESS, null);
+        UUID.randomUUID(),
+        occurredAt,
+        actor,
+        ActorType.USER,
+        "user.login",
+        "project:42",
+        "project",
+        Outcome.SUCCESS,
+        null,
+        payload);
   }
 }

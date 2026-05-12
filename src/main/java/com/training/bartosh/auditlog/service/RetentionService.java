@@ -19,20 +19,26 @@ public class RetentionService {
           id,
           occurred_at,
           actor,
+          actor_type,
           action,
           resource,
+          resource_type,
           outcome,
           context,
+          payload,
           archived_at
       )
       SELECT
           id,
           occurred_at,
           actor,
+          actor_type,
           action,
           resource,
+          resource_type,
           outcome,
           context,
+          payload,
           :archivedAt
       FROM audit_events
       WHERE occurred_at < :cutoff

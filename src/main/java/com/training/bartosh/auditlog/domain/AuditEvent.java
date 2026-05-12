@@ -7,11 +7,12 @@ import java.util.UUID;
 public record AuditEvent(
     UUID id,
     Instant occurredAt,
-    String actor,
+    Actor actor,
     String action,
-    String resource,
+    Resource resource,
     Outcome outcome,
-    JsonNode context) {
+    JsonNode context,
+    JsonNode payload) {
 
   public AuditEvent {
     if (id == null) {
@@ -20,7 +21,7 @@ public record AuditEvent(
     if (occurredAt == null) {
       throw new IllegalArgumentException("occurredAt is required");
     }
-    if (actor == null || actor.isBlank()) {
+    if (actor == null) {
       throw new IllegalArgumentException("actor is required");
     }
     if (action == null || action.isBlank()) {
