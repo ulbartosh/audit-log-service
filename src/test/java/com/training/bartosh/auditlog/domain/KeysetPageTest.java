@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,5 +42,24 @@ class KeysetPageTest {
 
     assertEquals(2, page.items().size());
     assertEquals(CURSOR, page.nextCursor().orElseThrow());
+  }
+
+  @Test
+  void itemsAreDefensivelyCopiedFromSourceList() {
+    List<String> source = new ArrayList<>();
+    source.add("a");
+
+    KeysetPage<String> page = new KeysetPage<>(source, Optional.empty());
+    source.add("b");
+
+    assertEquals(1, page.items().size());
+    assertEquals("a", page.items().get(0));
+  }
+
+  @Test
+  void rejectsNullElementInItems() {
+    List<String> withNull = Arrays.asList("a", null);
+
+    assertThrows(NullPointerException.class, () -> new KeysetPage<>(withNull, Optional.empty()));
   }
 }

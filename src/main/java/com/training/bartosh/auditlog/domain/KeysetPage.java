@@ -12,5 +12,6 @@ public record KeysetPage<T>(List<T> items, Optional<Cursor> nextCursor) {
     if (nextCursor == null) {
       throw new IllegalArgumentException("nextCursor is required");
     }
+    items = List.copyOf(items);
   }
 }
