@@ -66,16 +66,16 @@ Responses:
 
 ### `GET /audit-events`
 
-Search events. All filters optional; results sorted by `occurredAt DESC`.
+Search events. All filters optional; results sorted by `(occurredAt DESC, id DESC)`.
 
 | Param | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `actor` | string | — | Exact match |
-| `resource` | string | — | Exact match |
+| `actor` | string | - | Exact match. Non-blank when present. |
+| `resource` | string | - | Exact match. Non-blank when present. |
 | `from` | ISO-8601 instant | — | Inclusive lower bound on `occurredAt` |
 | `to` | ISO-8601 instant | — | Inclusive upper bound on `occurredAt` |
-| `page` | int | 0 | Zero-indexed |
-| `size` | int | 50 | Capped at 500 |
+| `pageToken` | string | - | Opaque continuation token from the previous response. Omit for the first page. |
+| `size` | int | 50 | Must be >= 1; silently capped at 500. |
 
 Response: `200 OK` with
 
@@ -91,11 +91,11 @@ Response: `200 OK` with
       "outcome": "SUCCESS"
     }
   ],
-  "page": 0,
-  "size": 50,
-  "total": 137
+  "nextPageToken": "eyJ2IjoxLCJvY2N1cnJlZEF0IjoiMjAyNi0wNS0xMlQxMjowMDowMFoiLCJpZCI6IjJlNzE2MDRkLTBmNTEtNGI3ZS1hMzJmLThkNmYwZDc5MDY4ZiJ9"
 }
 ```
+
+`nextPageToken` is omitted when the current page exhausts the result set. Repeat the same filters on each follow-up request; the token carries only the position in the sort order.
 
 ### Event schema
 
@@ -130,6 +130,9 @@ curl -i -X POST http://localhost:8080/audit-events \
 
 # Search
 curl 'http://localhost:8080/audit-events?actor=alice'
+
+# Continue from a previous search response
+curl 'http://localhost:8080/audit-events?actor=alice&size=25&pageToken=<nextPageToken>'
 
 # Validation error (missing actor)
 curl -i -X POST http://localhost:8080/audit-events \
