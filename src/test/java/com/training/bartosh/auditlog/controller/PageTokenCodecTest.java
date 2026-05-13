@@ -2,6 +2,7 @@ package com.training.bartosh.auditlog.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -80,6 +81,16 @@ class PageTokenCodecTest {
         base64Url("{\"v\":1,\"occurredAt\":\"" + OCCURRED_AT + "\",\"id\":\"not-a-uuid\"}");
 
     assertThrows(InvalidPageTokenException.class, () -> codec.decode(token));
+  }
+
+  @Test
+  void encodeReturnsNullWhenCursorIsNull() {
+    assertNull(codec.encode(null));
+  }
+
+  @Test
+  void decodeRejectsNullToken() {
+    assertThrows(InvalidPageTokenException.class, () -> codec.decode(null));
   }
 
   private static String base64Url(String json) {

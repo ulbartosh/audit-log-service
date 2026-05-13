@@ -22,6 +22,9 @@ public class PageTokenCodec {
   }
 
   public String encode(Cursor cursor) {
+    if (cursor == null) {
+      return null;
+    }
     try {
       byte[] json = mapper.writeValueAsBytes(new Token(VERSION, cursor.occurredAt(), cursor.id()));
       return Base64.getUrlEncoder().withoutPadding().encodeToString(json);
@@ -31,6 +34,9 @@ public class PageTokenCodec {
   }
 
   public Cursor decode(String token) {
+    if (token == null) {
+      throw new InvalidPageTokenException(INVALID);
+    }
     byte[] json;
     try {
       json = Base64.getUrlDecoder().decode(token);

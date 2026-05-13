@@ -41,4 +41,15 @@ class GlobalExceptionHandlerTest {
         Map.of("errors", List.of(Map.of("field", "pageToken", "message", "Invalid page token"))),
         response.getBody());
   }
+
+  @Test
+  void invalidPageTokenWithNullMessageRendersDefaultMessage() {
+    ResponseEntity<Map<String, Object>> response =
+        handler.handleInvalidPageToken(new InvalidPageTokenException(null));
+
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    assertEquals(
+        Map.of("errors", List.of(Map.of("field", "pageToken", "message", "Invalid page token"))),
+        response.getBody());
+  }
 }

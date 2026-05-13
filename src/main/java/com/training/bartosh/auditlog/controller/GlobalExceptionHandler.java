@@ -57,8 +57,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(InvalidPageTokenException.class)
   public ResponseEntity<Map<String, Object>> handleInvalidPageToken(InvalidPageTokenException ex) {
+    String message = ex.getMessage() == null ? "Invalid page token" : ex.getMessage();
     return ResponseEntity.badRequest()
-        .body(Map.of("errors", List.of(Map.of("field", ex.field(), "message", ex.getMessage()))));
+        .body(Map.of("errors", List.of(Map.of("field", ex.field(), "message", message))));
   }
 
   @ExceptionHandler(Exception.class)
