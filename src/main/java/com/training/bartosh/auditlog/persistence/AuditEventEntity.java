@@ -1,6 +1,7 @@
 package com.training.bartosh.auditlog.persistence;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.training.bartosh.auditlog.domain.ActorType;
 import com.training.bartosh.auditlog.domain.Outcome;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -25,10 +26,17 @@ public class AuditEventEntity {
   @Column(nullable = false)
   private String actor;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "actor_type", nullable = false)
+  private ActorType actorType;
+
   @Column(nullable = false)
   private String action;
 
   @Column private String resource;
+
+  @Column(name = "resource_type")
+  private String resourceType;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false)
@@ -38,23 +46,33 @@ public class AuditEventEntity {
   @Column(columnDefinition = "jsonb")
   private JsonNode context;
 
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(columnDefinition = "jsonb")
+  private JsonNode payload;
+
   protected AuditEventEntity() {}
 
   public AuditEventEntity(
       UUID id,
       Instant occurredAt,
       String actor,
+      ActorType actorType,
       String action,
       String resource,
+      String resourceType,
       Outcome outcome,
-      JsonNode context) {
+      JsonNode context,
+      JsonNode payload) {
     this.id = id;
     this.occurredAt = occurredAt;
     this.actor = actor;
+    this.actorType = actorType;
     this.action = action;
     this.resource = resource;
+    this.resourceType = resourceType;
     this.outcome = outcome;
     this.context = context;
+    this.payload = payload;
   }
 
   public UUID getId() {
@@ -69,6 +87,10 @@ public class AuditEventEntity {
     return actor;
   }
 
+  public ActorType getActorType() {
+    return actorType;
+  }
+
   public String getAction() {
     return action;
   }
@@ -77,11 +99,19 @@ public class AuditEventEntity {
     return resource;
   }
 
+  public String getResourceType() {
+    return resourceType;
+  }
+
   public Outcome getOutcome() {
     return outcome;
   }
 
   public JsonNode getContext() {
     return context;
+  }
+
+  public JsonNode getPayload() {
+    return payload;
   }
 }

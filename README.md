@@ -40,18 +40,23 @@ The compose stack publishes Postgres on host port `55432` rather than the standa
 
 Ingest a single event.
 
+**Breaking change:** `actor` and `resource` are structured objects on both POST and GET.
+Existing flat-string callers must update.
+
 ```json
 {
-  "actor": "alice",
+  "actor": { "id": "alice", "type": "USER" },
   "action": "user.login",
-  "resource": "project:42",
+  "resource": { "id": "project:42", "type": "project" },
   "outcome": "SUCCESS",
-  "context": { "ip": "10.0.0.1" }
+  "context": { "ip": "10.0.0.1" },
+  "payload": { "amount": 100 }
 }
 ```
 
-- **Required:** `actor`, `action`.
-- **Optional:** `resource`, `outcome` (defaults to `SUCCESS`), `context` (arbitrary JSON object).
+- **Required:** `actor.id`, `action`.
+- **Optional:** `actor.type` (defaults to `USER`), `resource`, `resource.type`, `outcome`
+  (defaults to `SUCCESS`), `context` (environmental metadata), `payload` (event body).
 - **Server-set:** `id` (UUID) and `occurredAt` (ISO-8601 instant). Any client-supplied `id` / `occurredAt` / `timestamp` is silently ignored.
 
 Responses:
@@ -76,7 +81,16 @@ Response: `200 OK` with
 
 ```json
 {
-  "items": [{ "...event..." }],
+  "items": [
+    {
+      "id": "2e71604d-0f51-4b7e-a32f-8d6f0d79068f",
+      "occurredAt": "2026-05-12T12:00:00Z",
+      "actor": { "id": "alice", "type": "USER" },
+      "action": "user.login",
+      "resource": { "id": "project:42", "type": "project" },
+      "outcome": "SUCCESS"
+    }
+  ],
   "page": 0,
   "size": 50,
   "total": 137
@@ -89,11 +103,16 @@ Response: `200 OK` with
 | --- | --- | --- | --- |
 | `id` | UUID | server | yes |
 | `occurredAt` | ISO-8601 instant | server | yes |
-| `actor` | string | client | yes |
+| `actor` | object `{ id, type }` | client | yes |
+| `actor.id` | string | client | yes |
+| `actor.type` | enum (`USER`) | client | defaults to `USER` |
 | `action` | string | client | yes |
-| `resource` | string | client | no |
+| `resource` | object `{ id, type }` | client | no |
+| `resource.id` | string | client | yes, when `resource` is present |
+| `resource.type` | string | client | no |
 | `outcome` | enum (`SUCCESS` / `DENIED` / `ERROR`) | client | defaults to `SUCCESS` |
 | `context` | arbitrary JSON | client | no |
+| `payload` | arbitrary JSON | client | no |
 
 ### Invariants
 
@@ -107,7 +126,7 @@ Response: `200 OK` with
 # Create
 curl -i -X POST http://localhost:8080/audit-events \
   -H 'Content-Type: application/json' \
-  -d '{"actor":"alice","action":"user.login","outcome":"SUCCESS"}'
+  -d '{"actor":{"id":"alice"},"action":"user.login","outcome":"SUCCESS","payload":{"source":"curl"}}'
 
 # Search
 curl 'http://localhost:8080/audit-events?actor=alice'

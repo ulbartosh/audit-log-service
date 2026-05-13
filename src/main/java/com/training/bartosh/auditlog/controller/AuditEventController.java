@@ -37,8 +37,7 @@ public class AuditEventController {
   @PostMapping
   public ResponseEntity<AuditEventResponse> create(
       @Valid @RequestBody CreateAuditEventRequest req) {
-    NewAuditEvent input =
-        new NewAuditEvent(req.actor(), req.action(), req.resource(), req.outcome(), req.context());
+    NewAuditEvent input = req.toDomain();
     AuditEvent event = service.record(input);
     URI location =
         ServletUriComponentsBuilder.fromCurrentRequest()
