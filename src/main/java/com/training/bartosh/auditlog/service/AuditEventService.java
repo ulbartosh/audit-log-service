@@ -1,6 +1,8 @@
 package com.training.bartosh.auditlog.service;
 
 import com.training.bartosh.auditlog.domain.AuditEvent;
+import com.training.bartosh.auditlog.domain.Cursor;
+import com.training.bartosh.auditlog.domain.KeysetPage;
 import com.training.bartosh.auditlog.domain.NewAuditEvent;
 import com.training.bartosh.auditlog.persistence.AuditEventEntity;
 import com.training.bartosh.auditlog.persistence.AuditEventEntity_;
@@ -10,10 +12,8 @@ import com.training.bartosh.auditlog.persistence.AuditEventSpecifications;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -47,7 +47,7 @@ public class AuditEventService {
   }
 
   @Transactional(readOnly = true)
-  public Page<AuditEvent> search(SearchQuery query, Pageable pageable) {
+  public KeysetPage<AuditEvent> search(SearchQuery query) {
     List<Specification<AuditEventEntity>> specs = new ArrayList<>();
     if (query.actor() != null) {
       specs.add(AuditEventSpecifications.byActor(query.actor()));
@@ -61,20 +61,26 @@ public class AuditEventService {
     if (query.to() != null) {
       specs.add(AuditEventSpecifications.occurredAtOrBefore(query.to()));
     }
+    query
+        .cursor()
+        .ifPresent(c -> specs.add(AuditEventSpecifications.afterCursor(c.occurredAt(), c.id())));
     Specification<AuditEventEntity> spec = Specification.allOf(specs);
-    return repository.findAll(spec, withDefaultSort(pageable)).map(AuditEventMapper::toDomain);
-  }
 
-  // The default sort lives here (not in the controller) so the property name comes from the
-  // generated JPA Metamodel constant, not a hardcoded string. The controller stays free of
-  // persistence imports per the layered-architecture rule.
-  private static Pageable withDefaultSort(Pageable pageable) {
-    if (pageable.getSort().isSorted()) {
-      return pageable;
+    Sort sort =
+        Sort.by(Sort.Direction.DESC, AuditEventEntity_.OCCURRED_AT)
+            .and(Sort.by(Sort.Direction.DESC, AuditEventEntity_.ID));
+
+    List<AuditEventEntity> rows =
+        repository.findBy(spec, q -> q.limit(query.size() + 1).sortBy(sort).all());
+
+    if (rows.size() <= query.size()) {
+      return new KeysetPage<>(
+          rows.stream().map(AuditEventMapper::toDomain).toList(), Optional.empty());
     }
-    return PageRequest.of(
-        pageable.getPageNumber(),
-        pageable.getPageSize(),
-        Sort.by(Sort.Direction.DESC, AuditEventEntity_.OCCURRED_AT));
+    List<AuditEventEntity> page = rows.subList(0, query.size());
+    AuditEventEntity last = page.get(page.size() - 1);
+    return new KeysetPage<>(
+        page.stream().map(AuditEventMapper::toDomain).toList(),
+        Optional.of(new Cursor(last.getOccurredAt(), last.getId())));
   }
 }
