@@ -3,11 +3,8 @@ package com.training.bartosh.auditlog.controller;
 import com.training.bartosh.auditlog.controller.dto.AuditEventResponse;
 import com.training.bartosh.auditlog.controller.dto.CreateAuditEventRequest;
 import com.training.bartosh.auditlog.controller.dto.PagedResponse;
-import com.training.bartosh.auditlog.domain.Actor;
-import com.training.bartosh.auditlog.domain.ActorType;
 import com.training.bartosh.auditlog.domain.AuditEvent;
 import com.training.bartosh.auditlog.domain.NewAuditEvent;
-import com.training.bartosh.auditlog.domain.Resource;
 import com.training.bartosh.auditlog.service.AuditEventService;
 import com.training.bartosh.auditlog.service.SearchQuery;
 import jakarta.validation.Valid;
@@ -40,14 +37,7 @@ public class AuditEventController {
   @PostMapping
   public ResponseEntity<AuditEventResponse> create(
       @Valid @RequestBody CreateAuditEventRequest req) {
-    Actor actor =
-        new Actor(
-            req.actor().id(), req.actor().type() != null ? req.actor().type() : ActorType.USER);
-    Resource resource =
-        req.resource() == null ? null : new Resource(req.resource().id(), req.resource().type());
-    NewAuditEvent input =
-        new NewAuditEvent(
-            actor, req.action(), resource, req.outcome(), req.context(), req.payload());
+    NewAuditEvent input = req.toDomain();
     AuditEvent event = service.record(input);
     URI location =
         ServletUriComponentsBuilder.fromCurrentRequest()
