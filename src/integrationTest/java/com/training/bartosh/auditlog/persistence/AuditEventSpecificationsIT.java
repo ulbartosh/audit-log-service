@@ -90,7 +90,13 @@ class AuditEventSpecificationsIT extends AuditLogIntegrationTest {
 
     List<AuditEventEntity> result =
         repository
-            .findAll(AuditEventSpecifications.afterCursor(T0, idAtT0), PageRequest.of(0, 10))
+            .findAll(
+                AuditEventSpecifications.afterCursor(T0, idAtT0),
+                PageRequest.of(
+                    0,
+                    10,
+                    Sort.by(Sort.Direction.DESC, AuditEventEntity_.OCCURRED_AT)
+                        .and(Sort.by(Sort.Direction.DESC, AuditEventEntity_.ID))))
             .getContent();
 
     assertTrue(result.isEmpty(), "no rows are positioned before the earliest cursor");
