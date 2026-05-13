@@ -30,4 +30,26 @@ class GlobalExceptionHandlerTest {
     assertEquals(
         Map.of("errors", List.of(Map.of("message", "Internal server error"))), response.getBody());
   }
+
+  @Test
+  void invalidPageTokenMapsToBadRequestWithFieldPageToken() {
+    ResponseEntity<Map<String, Object>> response =
+        handler.handleInvalidPageToken(new InvalidPageTokenException("Invalid page token"));
+
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    assertEquals(
+        Map.of("errors", List.of(Map.of("field", "pageToken", "message", "Invalid page token"))),
+        response.getBody());
+  }
+
+  @Test
+  void invalidPageTokenWithNullMessageRendersDefaultMessage() {
+    ResponseEntity<Map<String, Object>> response =
+        handler.handleInvalidPageToken(new InvalidPageTokenException(null));
+
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    assertEquals(
+        Map.of("errors", List.of(Map.of("field", "pageToken", "message", "Invalid page token"))),
+        response.getBody());
+  }
 }
