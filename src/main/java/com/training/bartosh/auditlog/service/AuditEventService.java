@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -72,7 +71,7 @@ public class AuditEventService {
             .and(Sort.by(Sort.Direction.DESC, AuditEventEntity_.ID));
 
     List<AuditEventEntity> rows =
-        repository.findAll(spec, PageRequest.of(0, query.size() + 1, sort)).getContent();
+        repository.findBy(spec, q -> q.limit(query.size() + 1).sortBy(sort).all());
 
     if (rows.size() <= query.size()) {
       return new KeysetPage<>(
