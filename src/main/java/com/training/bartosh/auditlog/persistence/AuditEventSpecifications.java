@@ -1,6 +1,8 @@
 package com.training.bartosh.auditlog.persistence;
 
 import java.time.Instant;
+import java.util.Objects;
+import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 
 /**
@@ -26,5 +28,16 @@ public final class AuditEventSpecifications {
 
   public static Specification<AuditEventEntity> occurredAtOrBefore(Instant to) {
     return (root, query, cb) -> cb.lessThanOrEqualTo(root.get(AuditEventEntity_.occurredAt), to);
+  }
+
+  public static Specification<AuditEventEntity> afterCursor(Instant ts, UUID lastId) {
+    Objects.requireNonNull(ts, "ts must not be null");
+    Objects.requireNonNull(lastId, "lastId must not be null");
+    return (root, query, cb) ->
+        cb.or(
+            cb.lessThan(root.get(AuditEventEntity_.occurredAt), ts),
+            cb.and(
+                cb.equal(root.get(AuditEventEntity_.occurredAt), ts),
+                cb.lessThan(root.get(AuditEventEntity_.id), lastId)));
   }
 }
