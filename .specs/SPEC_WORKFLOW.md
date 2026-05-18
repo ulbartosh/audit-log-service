@@ -1,4 +1,4 @@
-So # Specification Workflow
+# Specification Workflow
 
 How to plan a new problem in this repo before writing any code.
 

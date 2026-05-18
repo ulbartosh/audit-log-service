@@ -1,0 +1,10 @@
+[hooks]
+Stop = [
+  { hooks = [
+    { type = "command", command = "python3 .codex/hooks/spec_self_eval_stop.py", timeout = 900, statusMessage = "Running spec-self-eval for touched specs" },
+  ] },
+]
+
+[features]
+codex_hooks = true
+hooks = true
