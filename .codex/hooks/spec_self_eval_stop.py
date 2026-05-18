@@ -72,7 +72,8 @@ def find_turn_started_at(payload: dict) -> float:
     if transcript_path and turn_id:
         path = pathlib.Path(transcript_path)
         if path.is_file():
-            for event in reversed(read_jsonl(path)):
+            last_match_ts = None
+            for event in read_jsonl(path):
                 event_payload = event.get("payload") or {}
                 matching_task_started = (
                     event.get("type") == "event_msg"
@@ -84,21 +85,23 @@ def find_turn_started_at(payload: dict) -> float:
                     and event_payload.get("turn_id") == turn_id
                 )
                 if matching_task_started or matching_turn_context:
-                    return parse_timestamp(event.get("timestamp"))
+                    last_match_ts = parse_timestamp(event.get("timestamp"))
+            if last_match_ts is not None:
+                return last_match_ts
 
     return dt.datetime.now(UTC).timestamp()
 
 
-def read_jsonl(path: pathlib.Path) -> list[dict]:
-    events: list[dict] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return events
+def read_jsonl(path: pathlib.Path) -> Iterable[dict]:
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                yield json.loads(stripped)
+            except json.JSONDecodeError:
+                continue
 
 
 def parse_timestamp(value: str | None) -> float:
