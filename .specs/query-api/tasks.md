@@ -13,7 +13,7 @@ Acceptance criteria are referenced by `<persona>/<short-tag>`, where `<persona>`
 ```
 01 ──┬─► 02 ──────────────────────────────────────────────┐
      │                                                    ▼
-     └─► 03 ──┬─► 04 ─────────────────────────────────► 07
+     └─► 03 ──┬─► 04 ─────────────────────────────────► 07 ─► 08
              ├─► 05 ─────────────────────────────────────►
              └─► 06 ─────────────────────────────────────►
 ```
@@ -21,7 +21,8 @@ Acceptance criteria are referenced by `<persona>/<short-tag>`, where `<persona>`
 - **01** is independent.
 - **02** and **03** can run in parallel after 01.
 - **04**, **05**, **06** can run in parallel after 03.
-- **07** is the wiring step; requires 02, 04, 05, 06 all landed.
+- **07** is the keyset wiring step; requires 02, 04, 05, 06 all landed.
+- **08** is the actor-list filter step; requires 07.
 
 ---
 
@@ -96,7 +97,7 @@ _(append after merge)_
 
 **Refs**
 - Design: [`design.md` § Layer integration → domain/](./design.md#layer-integration), [§ Pagination strategy and cursor format](./design.md#pagination-strategy-and-cursor-format).
-- No AC directly satisfied in this step; preparation for `analyst/pagination`, `analyst/cap-500`, `analyst/no-overlap`, `analyst/beyond-end`.
+- Requirements ACs enabled: `analyst/pagination`, `analyst/cap-500`, `analyst/exactly-once-pagination`, `analyst/beyond-end`, `analyst/actor-order-pagination`.
 
 **Scope**
 - `domain/Cursor.java` — `record Cursor(Instant occurredAt, UUID id)`; compact ctor rejects null fields.
@@ -121,7 +122,7 @@ _(append after merge)_
 
 **Refs**
 - Design: [`design.md` § Layer integration → persistence/ → `AuditEventSpecifications`](./design.md#layer-integration), [§ Pagination strategy → Next-page predicate](./design.md#pagination-strategy-and-cursor-format).
-- Preparation for `analyst/no-overlap`, `analyst/beyond-end`.
+- Requirements ACs enabled: `analyst/exactly-once-pagination`, `analyst/beyond-end`, `analyst/actor-order-pagination`.
 
 **Scope**
 - Add `public static Specification<AuditEventEntity> afterCursor(Instant ts, UUID lastId)` to `AuditEventSpecifications` with the exact body from [`design.md` § Layer integration](./design.md#layer-integration) (uses `AuditEventEntity_.occurredAt` and `AuditEventEntity_.id` from the JPA Metamodel).
@@ -144,7 +145,7 @@ _(append after merge)_
 
 **Refs**
 - Design: [`design.md` § Pagination strategy and cursor format → Cursor / Malformed token](./design.md#pagination-strategy-and-cursor-format), [§ Layer integration → controller/](./design.md#layer-integration).
-- Preparation for `analyst/pagination`, `analyst/malformed-token`.
+- Requirements ACs enabled: `analyst/pagination`, `analyst/malformed-token`.
 
 **Scope**
 - `controller/PageTokenCodec.java` — bean that encodes a `Cursor` to base64-url JSON `{"v":1,"occurredAt":…,"id":…}` and decodes it back. Decoder rejects: non-base64, malformed JSON, missing fields, `v != 1`, non-ISO-8601 `occurredAt`, non-UUID `id` → throws `InvalidPageTokenException`.
@@ -170,7 +171,7 @@ _(append after merge)_
 
 **Refs**
 - Design: [`design.md` § API contract → `GET /audit-events` response](./design.md#api-contract), [§ Layer integration → controller/](./design.md#layer-integration).
-- Preparation for `compliance/empty-result`, `analyst/beyond-end`.
+- Requirements ACs enabled: `compliance/empty-result`, `analyst/beyond-end`.
 
 **Scope**
 - `controller/dto/KeysetPageResponse.java` — `record KeysetPageResponse<T>(List<T> items, String nextPageToken)`. Annotate with `@JsonInclude(NON_NULL)` so `nextPageToken` is omitted on serialization when null.
@@ -195,19 +196,19 @@ _(append after merge)_
 **Refs**
 - Design: [`design.md` § API contract → `GET /audit-events`](./design.md#api-contract), [§ Pagination strategy and cursor format](./design.md#pagination-strategy-and-cursor-format), [§ Layer integration → service/, controller/](./design.md#layer-integration).
 - Requirements ACs:
-  - `compliance/combined-filters` — re-asserted under keyset.
+  - `compliance/resource-filter`, `compliance/from-filter`, `compliance/to-filter`, `compliance/and-filters` — re-asserted under keyset.
   - `compliance/empty-result` — "`200 OK` with `items: []` and `nextPageToken` omitted".
   - `compliance/from-malformed`, `compliance/to-malformed`, `compliance/from-after-to` — existing rejections preserved.
   - `sre/order-desc` — most-recent-first under `(occurredAt DESC, id DESC)`.
   - `analyst/pagination` — paginate result sets larger than one response.
   - `analyst/cap-500` — `size` silently capped at 500.
-  - `analyst/no-overlap` — consecutive pages: no overlap / no missing rows.
+  - `analyst/exactly-once-pagination` — consecutive pages return each matching row exactly once.
   - `analyst/beyond-end` — page beyond end → `200` + `items: []` + no `nextPageToken`.
   - `analyst/malformed-token` — `400` with `errors[0].field == "pageToken"`.
 
 **Scope**
 - `service/SearchQuery` — replace `int page, int size` with `Optional<Cursor> cursor, int size`.
-- `service/AuditEventService.search(...)` — return `KeysetPage<AuditEvent>`. Build `Specification` from filters; if `cursor` present, compose with `afterCursor`. Sort by `(occurred_at DESC, id DESC)`. Fetch via `PageRequest.of(0, size + 1)`. If `result.size() > size`, drop the extra row and set `nextCursor = Optional.of(new Cursor(lastInRange.occurredAt(), lastInRange.id()))`; otherwise `Optional.empty()`.
+- `service/AuditEventService.search(...)` — return `KeysetPage<AuditEvent>`. Build `Specification` from filters; if `cursor` present, compose with `afterCursor`. Sort by `(occurred_at DESC, id DESC)`. Fetch `size + 1` rows with a limit-style query that does not execute a total count. If `result.size() > size`, drop the extra row and set `nextCursor = Optional.of(new Cursor(lastInRange.occurredAt(), lastInRange.id()))`; otherwise `Optional.empty()`.
 - `controller/AuditEventController.search(...)` — replace `page` / `size` params with `Optional<String> pageToken` + `@RequestParam(defaultValue = "50") int size`. Decode/encode via `PageTokenCodec`. Reject `size < 1`; silently cap `size > 500`. Return `KeysetPageResponse<AuditEventResponse>`.
 - `controller/dto/PagedResponse.java` — **delete**. If any other production caller still imports it, leave it and document why in the PR description (no other caller exists at the time this spec was written; verify with `rg` before deleting).
 - Update README and any quickstart examples that show offset paging on `GET /audit-events`.
@@ -221,7 +222,7 @@ _(append after merge)_
   - **`sre/order-desc`** — seed N rows with mixed `occurredAt`/`id`; GET returns them strictly newest-first.
   - **`analyst/pagination`** — seed > `size` rows, walk pages via `nextPageToken`, assert union equals seeded set with no duplicates.
   - **`analyst/cap-500`** — request `size=10000` → response carries at most 500 items; no error.
-  - **`analyst/no-overlap`** — page 1, insert new row, page 2: assert no duplicate id and no skipped id from the originally-seeded set (the new row appears on neither page — verifies the backward-walk stability claim in [`design.md` § Pagination → Stability under concurrent ingest](./design.md#pagination-strategy-and-cursor-format)).
+  - **`analyst/exactly-once-pagination`** — page 1, insert new row, page 2: assert every originally-seeded matching id appears exactly once and the new row appears on neither page — verifies the backward-walk stability claim in [`design.md` § Pagination → Stability under concurrent ingest](./design.md#pagination-strategy-and-cursor-format).
   - **`analyst/beyond-end`** — drive the cursor to past the last row → `200`, `items: []`, no `nextPageToken`.
   - **`analyst/malformed-token`** — `pageToken=not-base64` and `pageToken=<valid base64 of {"v":2,…}>` both yield `400` with `errors[0].field == "pageToken"`.
 - ArchUnit boundary tests still pass.
@@ -235,14 +236,62 @@ _(append after merge)_
 
 ---
 
+## 08 — Comma-separated actor list filters
+
+**Branch:** `query-api/t08-actor-list-filter`
+
+**Refs**
+- Design: [`design.md` § API contract → `GET /audit-events`](./design.md#api-contract), [§ Pagination strategy and cursor format → Filter predicates / Filter consistency](./design.md#pagination-strategy-and-cursor-format), [§ Validation rules → `GET /audit-events`](./design.md#validation-rules), [§ Layer integration → controller/ service/ persistence/](./design.md#layer-integration).
+- Requirements ACs:
+  - `compliance/actor-list` — comma-separated actors match any listed actor ID.
+  - `compliance/actor-trim` — actor entries are trimmed before matching.
+  - `compliance/actor-duplicates` — duplicate actor IDs behave as one filter value.
+  - `compliance/actor-empty-entry` — empty actor entries return `400`.
+  - `compliance/actor-max-ten` — more than ten raw actor entries return `400`.
+  - `analyst/actor-order-pagination` — same actor ID set in different order is identical for pagination consistency.
+
+**Scope**
+- `controller/ActorFilterParser` — parse the single `actor` query parameter into a canonical immutable actor ID list: split on commas, enforce 1–10 raw entries before de-duplication, trim entries, reject empty entries, de-duplicate, and sort unique IDs lexicographically.
+- `controller/AuditEventController.search(...)` — pass the canonical actor ID list into `SearchQuery`; render actor parse errors as `400 Bad Request` with `errors[0].field == "actor"`.
+- `service/SearchQuery` — replace the single actor string with `List<String> actorIds`.
+- `persistence/AuditEventSpecifications` — replace `byActor(String)` search usage with `byActors(Collection<String>)` using an `IN` predicate against the existing `actor` column.
+- Pagination cursor remains position-only; actor-list order and duplicates are normalized before querying so equal actor sets produce equal page walks without embedding filters in the token.
+- README examples for `GET /audit-events` show comma-separated actor filters and the actor validation limits.
+
+**Definition of Done**
+- `./gradlew build` and `./gradlew check` green; JaCoCo ≥ 90%.
+- Unit tests for `ActorFilterParser`: trims surrounding whitespace, rejects empty entries (`actor=`, `a1,,a2`, `a1,`), rejects more than ten raw entries before de-duplication, accepts duplicate IDs, and returns sorted unique IDs.
+- Persistence test: `byActors(List.of("a1", "a2"))` returns rows for either actor and still composes with resource and time-range predicates.
+- Integration test: `GET /audit-events?actor=a1,a2` returns events for either actor and excludes other actors while preserving other filters.
+- Integration test: `GET /audit-events?actor=%20a1%20,%20a2%20` trims entries before matching.
+- Integration test: duplicate actor IDs such as `actor=a1,a1,a2` behave like `actor=a1,a2`.
+- Integration tests: empty actor entries and more than ten raw actor entries return `400` with `errors[0].field == "actor"`.
+- Pagination integration test: page 1 with `actor=a1,a2`, then page 2 with the returned token and `actor=a2,a1`, yields the same remaining result set with no duplicates or gaps.
+- README updated with the comma-separated actor filter contract.
+
+**Dependencies:** 07.
+
+**Execution result:**
+_(append after merge)_
+
+---
+
 ## Coverage check (every AC has a step)
 
 | AC | Implemented by | Covered by test in step |
 |---|---|---|
-| `compliance/combined-filters` | 02 (shape) + 07 (paging) | 07 |
+| `compliance/actor-list` | 08 | 08 |
+| `compliance/actor-trim` | 08 | 08 |
+| `compliance/actor-duplicates` | 08 | 08 |
+| `compliance/resource-filter` | 07 | 07 |
+| `compliance/from-filter` | 07 | 07 |
+| `compliance/to-filter` | 07 | 07 |
+| `compliance/and-filters` | 07 + 08 | 07 + 08 |
 | `compliance/actor-structured` | 02 | 02 |
 | `compliance/resource-structured` | 02 | 02 |
 | `compliance/empty-result` | 07 | 07 |
+| `compliance/actor-empty-entry` | 08 | 08 |
+| `compliance/actor-max-ten` | 08 | 08 |
 | `compliance/from-malformed` | already in main; preserved | 07 (regression assert) |
 | `compliance/to-malformed` | already in main; preserved | 07 (regression assert) |
 | `compliance/from-after-to` | already in main; preserved | 07 (regression assert) |
@@ -253,6 +302,7 @@ _(append after merge)_
 | `sre/context-absent` | already in main; re-asserted | 02 |
 | `analyst/pagination` | 07 | 07 |
 | `analyst/cap-500` | 07 | 07 |
-| `analyst/no-overlap` | 07 | 07 |
+| `analyst/exactly-once-pagination` | 07 | 07 |
+| `analyst/actor-order-pagination` | 08 | 08 |
 | `analyst/beyond-end` | 07 | 07 |
 | `analyst/malformed-token` | 07 | 07 |

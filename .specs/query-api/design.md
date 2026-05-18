@@ -7,12 +7,14 @@
 | 1 | `total` field in response | **Dropped.** No persona has a stated need; inherited from offset-pagination convention. |
 | 2 | Pagination strategy & wire shape | **Keyset on the wire**, opaque `nextPageToken`. No `page`, no `total`. |
 | 3 | Deterministic sort with tiebreaker | `ORDER BY occurred_at DESC, id DESC`. `id` (`UUID PRIMARY KEY`) is unique → total order. |
-| 4 | Indexes for the filterable columns | Three composite indexes on `(filter, occurred_at DESC, id DESC)`. See § Data model. |
+| 4 | Indexes for the filterable columns | Keep the existing three composite indexes on `(filter, occurred_at DESC, id DESC)`. Multi-actor filters are bounded to ten IDs and use the actor/time index with `actor IN (...)`; no new migration is required. See § Data model. |
 | 5 | `resource.id` extraction | Wire `resource.id` keeps the full string. DB stores `resource_type` in a new column. |
 | 6 | `resource.type` shape | **Free-form non-blank string.** Not constrained to an enum. |
 | 7 | `actor.type` values | **`USER` only** this iteration. Enum is extensible (column type is `TEXT`). |
 | 8 | Legacy events | **Table is empty.** No backfill migration; new columns ship with defaults. |
 | 9 | `payload` vs `context` convention | **`payload` = canonical event body** (action-specific business data, e.g. `{ amount: 100 }`). **`context` = environmental metadata** about how the action was invoked (e.g. `{ ip, userAgent, requestId }`). Both optional. |
+| 10 | Actor list parsing | Accept one to ten comma-separated actor IDs in the single `actor` parameter; trim entries, reject empty entries, apply the ten-entry cap before de-duplication, then de-duplicate. |
+| 11 | Actor-list pagination identity | Canonicalize actor filters as the sorted de-duplicated actor ID set. Different order or duplicates represent the same filter identity for pagination. |
 
 ---
 
@@ -24,7 +26,7 @@ Request parameters:
 
 | Param | Type | Required | Notes |
 |---|---|---|---|
-| `actor` | string | no | Exact match on `actor` column (case-sensitive). |
+| `actor` | comma-separated string | no | One to ten actor IDs in a single parameter. Trim entries, reject empty entries, cap raw entries at ten before de-duplication, de-duplicate repeated IDs, then match any unique actor ID exactly (case-sensitive). |
 | `resource` | string | no | Exact match on `resource` column (case-sensitive, full string). |
 | `from` | ISO-8601 instant | no | Inclusive lower bound on `occurred_at`. |
 | `to` | ISO-8601 instant | no | Inclusive upper bound on `occurred_at`. |
@@ -60,7 +62,7 @@ Response (replaces today's `PagedResponse<T>` for this endpoint):
 | Code | When |
 |---|---|
 | `200 OK` | Success, including empty result sets. |
-| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `actor`/`resource`; invalid `size`; malformed or unsupported-version `pageToken`. |
+| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `resource`; blank/empty actor entries; more than ten raw actor entries; invalid `size`; malformed or unsupported-version `pageToken`. |
 | `500 Internal Server Error` | Unexpected failure. Opaque body, full stack to log. |
 
 ### Changes to existing `POST /audit-events`
@@ -99,11 +101,15 @@ Field-level changes:
 OR (occurred_at = :cursor_ts AND id < :cursor_id)
 ```
 
+**Filter predicates.** Caller filters are composed with AND. The actor filter is parsed into a canonical unique list and rendered as `actor IN (:actor_ids)`; a single actor is the one-element form of the same predicate. `resource` remains an exact equality predicate. `from` and `to` remain inclusive bounds.
+
 **Stability under concurrent ingest.** New events arrive with `occurred_at >= now`. Because pages are walked strictly *backwards* through `(occurred_at, id)` order, new rows are always ahead of every issued cursor and cannot appear on later pages, nor can they shift the position of older rows. No `to` pinning is required.
 
-**Filter consistency.** The client must repeat the same `actor` / `resource` / `from` / `to` parameters on every page request. The cursor does not embed them; if the client passes different filters with a `pageToken`, the server returns results consistent with the new filters from the cursor position onward (undefined-but-not-erroring behavior — documented, not enforced).
+**Filter consistency.** The client must repeat the same `actor` / `resource` / `from` / `to` parameters on every page request. The cursor does not embed filters; it carries only position. The server canonicalizes the request filters before querying, so `actor=a1,a2`, `actor=a2,a1`, and `actor=a1,a1,a2` are identical for pagination. If the client passes a genuinely different filter set with a `pageToken`, the server returns results consistent with the new filters from the cursor position onward (documented, not rejected).
 
 **End of pages.** The server fetches `size + 1` rows; if a `size + 1`-th row exists, the cursor for the next page is built from the `size`-th row and the extra row is dropped from `items`. If only ≤ `size` rows are returned, `nextPageToken` is omitted.
+
+**Query count behavior.** The keyset query must not execute a total-count query. Use a limit-style query with `size + 1` and `Sort.by(occurred_at DESC, id DESC)` so next-page detection comes from the extra row, not `COUNT(*)`.
 
 **Malformed token.** `400 Bad Request` with the existing `{ errors: [{ field, message }] }` envelope (`field = "pageToken"`).
 
@@ -147,7 +153,8 @@ CREATE INDEX idx_audit_events_time
 ### Index notes
 
 - Each composite index ends with `id DESC` so PostgreSQL can satisfy `ORDER BY occurred_at DESC, id DESC` directly from the index without a separate sort step.
-- No composite `(actor, resource, …)` index — combined `actor + resource` filters are rare; the planner can use either single-filter index and recheck. Revisit if profiling shows a hot path.
+- Multi-actor filters use the existing `idx_audit_events_actor_time` index with a bounded `actor IN (...)` predicate. Keeping this index avoids another migration and preserves the efficient leading equality + descending time walk for the common actor-filtered path.
+- Trade-off: combined `actor + resource` filters may require the planner to use the actor or resource index and recheck the other predicate. The actor list is capped at ten raw entries to bound this cost; revisit with a composite `(actor, resource, occurred_at DESC, id DESC)` index only if production profiling shows combined filters are hot.
 - No index on `actor_type` or `resource_type` — they are response fields, not filters, in this iteration.
 
 ### Backfill
@@ -162,7 +169,7 @@ None. Per resolution #8, the table is empty.
 
 | Param | Rule |
 |---|---|
-| `actor` | If present, must be non-blank. → `400` on blank. |
+| `actor` | If present, split on commas. Raw entry count must be 1–10 before de-duplication; trim each entry; reject empty entries after trimming; de-duplicate repeated IDs; sort unique IDs lexicographically for canonical filter identity; exact case-sensitive match against any unique ID. |
 | `resource` | If present, must be non-blank. Exact match against full `resource` column. |
 | `from` | If present, must parse as ISO-8601 instant. → `400` on parse failure. |
 | `to` | If present, must parse as ISO-8601 instant. → `400` on parse failure. |
@@ -225,7 +232,7 @@ Updated:
 
 `AuditEventSpecifications`:
 
-- `byActor(String)` and `byResource(String)` are unchanged — they continue to match the existing `actor` / `resource` string columns. The new `actor_type` / `resource_type` columns are not filtered in this iteration.
+- Replace `byActor(String)` with `byActors(Collection<String>)` using `root.get(AuditEventEntity_.actor).in(actorIds)`. The collection is the canonical unique actor ID list from the controller/service boundary. `byResource(String)` is unchanged and continues to match the existing `resource` string column. The new `actor_type` / `resource_type` columns are not filtered in this iteration.
 - New helper `afterCursor(Instant ts, UUID lastId)`:
 
 ```java
@@ -242,18 +249,19 @@ public static Specification<AuditEventEntity> afterCursor(Instant ts, UUID lastI
 
 ### `service/`
 
-- `SearchQuery` — replace `int page, int size` with `Optional<Cursor> cursor, int size`.
+- `SearchQuery` — replace `String actor, int page, int size` with `List<String> actorIds, Optional<Cursor> cursor, int size`; `actorIds` is already trimmed, de-duplicated, sorted, and immutable when it reaches the service.
 - `AuditEventService.search(...)` — returns a new domain page type:
 
 ```
 domain/KeysetPage.java  record KeysetPage<T>(List<T> items, Optional<Cursor> nextCursor)
 ```
 
-Implementation: build Specification from filters, conditionally compose with `afterCursor(...)`, set `Sort.by(occurred_at DESC, id DESC)`, page with `PageRequest.of(0, size + 1)`. If `result.size() > size`, drop the extra row and build `nextCursor` from the previously-last in-range row's `(occurredAt, id)`.
+Implementation: build Specification from filters, compose `byActors(actorIds)` only when the actor list is non-empty, conditionally compose with `afterCursor(...)`, set `Sort.by(occurred_at DESC, id DESC)`, and fetch `size + 1` rows without issuing a count query. If `result.size() > size`, drop the extra row and build `nextCursor` from the previously-last in-range row's `(occurredAt, id)`.
 
 ### `controller/`
 
-- `AuditEventController.search(...)` — `@RequestParam Optional<String> pageToken, @RequestParam(defaultValue = "50") int size`. Decode/encode the token in a `PageTokenCodec` bean (lives in `controller/` so the domain doesn't import `java.util.Base64`).
+- `AuditEventController.search(...)` — `@RequestParam Optional<String> actor, @RequestParam Optional<String> pageToken, @RequestParam(defaultValue = "50") int size`. Parse actor with an `ActorFilterParser` in `controller/` before constructing `SearchQuery`. Decode/encode the token in a `PageTokenCodec` bean (lives in `controller/` so the domain doesn't import `java.util.Base64`).
+- `ActorFilterParser` — split a single comma-separated `actor` parameter, enforce the 1–10 raw-entry limit, trim entries, reject empty entries, de-duplicate, and sort unique IDs to produce the canonical actor list. Map validation failures to `400 Bad Request` with `field = "actor"`.
 - New `KeysetPageResponse<T>(List<T> items, String nextPageToken)` DTO, annotated `@JsonInclude(NON_NULL)` so `nextPageToken` is omitted when null.
 - New nested DTOs in `controller/dto/`:
 
@@ -280,6 +288,8 @@ public record ResourceResponse(String id, String type) {}
 | Schema via Flyway only | V4 is a new migration; V1–V3 are untouched. |
 | Layered architecture | DTOs in `controller/dto/`; domain types in `domain/`; flat columns at the persistence boundary, mapped in `AuditEventMapper`. Controller never reaches into `persistence/`; service mediates. |
 | ArchUnit boundaries | No new cross-layer imports. The four `ArchitectureTest` rules continue to pass. |
+| Required `actor` | Ingest still requires `actor` as `@Valid @NotNull ActorRequest` with `actor.id @NotBlank`; query `actor` remains optional because search without an actor is valid. |
+| Server-set timestamp | No request DTO accepts a client timestamp. Search reads server-set `occurred_at` values and never changes them. |
 | Breaking change acknowledged | `actor` and `resource` change shape on both the GET response and the POST request. Pagination wire shape changes from `page/size/total` to `pageToken/nextPageToken`. Call out in the PR description; consumers must update. |
 | JaCoCo ≥ 90% | New unit tests: `Actor` / `Resource` / `Cursor` compact-ctor invariants, `PageTokenCodec` round-trip + bad-input cases, `KeysetPage` slicing logic. New integration tests below cover the cross-layer paths. |
 | Flyway clean from empty DB | V4 only adds nullable (`resource_type`, `payload`) and defaulted (`actor_type`) columns and recreates indexes — no row-level dependencies. `FlywayMigrationIT` catches regressions. |
