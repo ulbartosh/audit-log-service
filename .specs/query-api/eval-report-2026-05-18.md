@@ -7,6 +7,7 @@ Scope: `.specs/query-api/`
 | Required sections present | PASS | `requirements.md` contains a Problem section, persona-specific acceptance criteria, and an Out of scope section. |
 | ACs follow EAR style | PASS | `requirements.md` writes each AC as a single "When...", "If..., then...", or "The system shall..." sentence. |
 | ACs are atomic and observably testable | PASS | `requirements.md` describes externally observable request, response, filtering, ordering, and pagination behavior. |
+| Pagination strategy is justified | PASS | `design.md` chooses keyset pagination and explains the `(occurred_at DESC, id DESC)` tiebreaker, cursor predicate, concurrent-ingest stability, and `size + 1` next-page detection. |
 | API contract is specified | PASS | `design.md` specifies `GET /audit-events`, changed `POST /audit-events` fields, request/response shapes, and status codes. |
 | Data model and validation are specified | PASS | `design.md` defines the V4 migration, index shapes, column rules, and GET/POST validation rules. |
 | Layer integration is mapped | PASS | `design.md` maps changes across `domain/`, `persistence/`, `service/`, and `controller/`. |
