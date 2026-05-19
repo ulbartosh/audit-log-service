@@ -13,15 +13,12 @@ import sys
 import tempfile
 from typing import Iterable
 
-UTC = dt.timezone.utc
-
 
 def main() -> int:
     try:
         payload = read_payload()
         cwd = pathlib.Path(payload.get("cwd") or os.getcwd()).resolve()
-        turn_started_at = find_turn_started_at(payload)
-        features = touched_spec_features(cwd, turn_started_at)
+        features = changed_spec_features(cwd)
         if not features:
             return 0
 
@@ -37,10 +34,11 @@ def main() -> int:
                 continue
 
             report = eval_report_path(feature_dir, report_date)
-            result = run_spec_self_eval(cwd, feature_dir, report, payload)
-            if result.returncode != 0:
-                eval_errors.append(format_eval_error(feature, result))
-                continue
+            if needs_eval(feature_dir, report):
+                result = run_spec_self_eval(cwd, feature_dir, report, payload)
+                if result.returncode != 0:
+                    eval_errors.append(format_eval_error(feature, result))
+                    continue
 
             failures = extract_failures(report)
             if failures:
@@ -66,75 +64,62 @@ def read_payload() -> dict:
     return json.loads(raw)
 
 
-def find_turn_started_at(payload: dict) -> float:
-    transcript_path = payload.get("transcript_path")
-    turn_id = payload.get("turn_id")
-    if transcript_path and turn_id:
-        path = pathlib.Path(transcript_path)
-        if path.is_file():
-            last_match_ts = None
-            for event in read_jsonl(path):
-                event_payload = event.get("payload") or {}
-                matching_task_started = (
-                    event.get("type") == "event_msg"
-                    and event_payload.get("type") == "task_started"
-                    and event_payload.get("turn_id") == turn_id
-                )
-                matching_turn_context = (
-                    event.get("type") == "turn_context"
-                    and event_payload.get("turn_id") == turn_id
-                )
-                if matching_task_started or matching_turn_context:
-                    last_match_ts = parse_timestamp(event.get("timestamp"))
-            if last_match_ts is not None:
-                return last_match_ts
+def changed_spec_features(cwd: pathlib.Path) -> set[str]:
+    """Return .specs/<feature> folders with current working-tree changes."""
+    features = changed_spec_features_from_git(cwd)
+    if features is not None:
+        return features
 
-    return dt.datetime.now(UTC).timestamp()
+    return set()
 
 
-def read_jsonl(path: pathlib.Path) -> Iterable[dict]:
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                yield json.loads(stripped)
-            except json.JSONDecodeError:
-                continue
+def changed_spec_features_from_git(cwd: pathlib.Path) -> set[str] | None:
+    result = subprocess.run(
+        ["git", "status", "--porcelain=v1", "-z", "--", ".specs"],
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return None
 
-
-def parse_timestamp(value: str | None) -> float:
-    if not value:
-        return dt.datetime.now(UTC).timestamp()
-    normalized = value.replace("Z", "+00:00")
-    return dt.datetime.fromisoformat(normalized).timestamp()
-
-
-def touched_spec_features(cwd: pathlib.Path, turn_started_at: float) -> set[str]:
-    specs_dir = cwd / ".specs"
-    if not specs_dir.is_dir():
-        return set()
-
-    threshold = turn_started_at - 1.0
     features: set[str] = set()
-    for path in specs_dir.rglob("*"):
-        relative = path.relative_to(cwd)
-        parts = relative.parts
-        if len(parts) < 2:
-            continue
-        if parts[0] != ".specs" or not parts[1]:
-            continue
-        if len(parts) == 2 and not path.is_dir():
-            continue
-        try:
-            stat = path.stat()
-        except OSError:
-            continue
-        if max(stat.st_mtime, stat.st_ctime) >= threshold:
-            features.add(parts[1])
+    entries = [entry for entry in result.stdout.split("\0") if entry]
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        status = entry[:2]
+        path_text = entry[3:] if len(entry) > 3 else ""
+        add_feature_from_git_status_path(features, path_text)
+
+        if "R" in status or "C" in status:
+            index += 1
+            if index < len(entries):
+                add_feature_from_git_status_path(features, entries[index])
+
+        index += 1
 
     return features
+
+
+def add_feature_from_git_status_path(features: set[str], path_text: str) -> None:
+    if not path_text:
+        return
+
+    feature = feature_from_spec_path(pathlib.PurePath(path_text))
+    if feature is not None:
+        features.add(feature)
+
+
+def feature_from_spec_path(
+    relative: pathlib.PurePath, include_feature_dir: bool = False
+) -> str | None:
+    parts = relative.parts
+    if len(parts) < 2 or parts[0] != ".specs" or not parts[1]:
+        return None
+    if len(parts) == 2 and not include_feature_dir:
+        return None
+    return parts[1]
 
 
 def run_spec_self_eval(
@@ -162,7 +147,7 @@ def run_spec_self_eval(
             shell=True,
             text=True,
             capture_output=True,
-            timeout=int(env.get("SPEC_SELF_EVAL_TIMEOUT_SEC", "840")),
+            timeout=int(env.get("SPEC_SELF_EVAL_TIMEOUT_SEC", "180")),
         )
 
     codex = codex_binary(env)
@@ -190,7 +175,7 @@ def run_spec_self_eval(
             env=env,
             text=True,
             capture_output=True,
-            timeout=int(env.get("SPEC_SELF_EVAL_TIMEOUT_SEC", "840")),
+            timeout=int(env.get("SPEC_SELF_EVAL_TIMEOUT_SEC", "180")),
         )
 
 
@@ -217,6 +202,29 @@ def build_eval_prompt(
 
 def eval_report_path(feature_dir: pathlib.Path, report_date: str) -> pathlib.Path:
     return feature_dir / f"eval-report-{report_date}.md"
+
+
+def needs_eval(feature_dir: pathlib.Path, report_path: pathlib.Path) -> bool:
+    if not report_path.is_file():
+        return True
+
+    try:
+        report_mtime = report_path.stat().st_mtime
+    except OSError:
+        return True
+
+    for path in feature_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        if path == report_path or path.name.startswith("eval-report-"):
+            continue
+        try:
+            if path.stat().st_mtime > report_mtime:
+                return True
+        except OSError:
+            return True
+
+    return False
 
 
 def codex_binary(env: dict[str, str]) -> str:
