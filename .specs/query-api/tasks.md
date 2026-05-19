@@ -252,21 +252,23 @@ _(append after merge)_
 
 **Scope**
 - `controller/ActorFilterParser` — parse the single `actor` query parameter into a canonical immutable actor ID list: split on commas, enforce 1–10 raw entries before de-duplication, trim entries, reject empty entries, de-duplicate, and sort unique IDs lexicographically.
-- `controller/AuditEventController.search(...)` — pass the canonical actor ID list into `SearchQuery`; render actor parse errors as `400 Bad Request` with `errors[0].field == "actor"`.
+- `controller/AuditEventController.search(...)` — pass the canonical actor ID list into `SearchQuery`; render actor validation errors (empty entries or more than ten raw entries) as `400 Bad Request` with `errors[0].field == "actor"`.
 - `service/SearchQuery` — replace the single actor string with `List<String> actorIds`.
 - `persistence/AuditEventSpecifications` — replace `byActor(String)` search usage with `byActors(Collection<String>)` using an `IN` predicate against the existing `actor` column.
+- Actor filtering is a single query-level OR/IN predicate, not one repository/database query per actor. No new T08 migration is required because `design.md` explicitly justifies the existing `idx_audit_events_actor_time (actor, occurred_at DESC, id DESC)` index for the bounded actor-list filter.
 - Pagination cursor remains position-only; actor-list order and duplicates are normalized before querying so equal actor sets produce equal page walks without embedding filters in the token.
 - README examples for `GET /audit-events` show comma-separated actor filters and the actor validation limits.
 
 **Definition of Done**
 - `./gradlew build` and `./gradlew check` green; JaCoCo ≥ 90%.
 - Unit tests for `ActorFilterParser`: trims surrounding whitespace, rejects empty entries (`actor=`, `a1,,a2`, `a1,`), rejects more than ten raw entries before de-duplication, accepts duplicate IDs, and returns sorted unique IDs.
-- Persistence test: `byActors(List.of("a1", "a2"))` returns rows for either actor and still composes with resource and time-range predicates.
-- Integration test: `GET /audit-events?actor=a1,a2` returns events for either actor and excludes other actors while preserving other filters.
+- Persistence test: `byActors(List.of("a1", "a2", "a3"))` returns rows for any listed actor and still composes with resource and time-range predicates through one `IN` predicate.
+- Integration tests: happy paths for `GET /audit-events?actor=a1`, `actor=a1,a2,a3`, and an actor list containing exactly ten raw actors all return matching actors and exclude non-matching actors.
 - Integration test: `GET /audit-events?actor=%20a1%20,%20a2%20` trims entries before matching.
 - Integration test: duplicate actor IDs such as `actor=a1,a1,a2` behave like `actor=a1,a2`.
-- Integration tests: empty actor entries and more than ten raw actor entries return `400` with `errors[0].field == "actor"`.
-- Pagination integration test: page 1 with `actor=a1,a2`, then page 2 with the returned token and `actor=a2,a1`, yields the same remaining result set with no duplicates or gaps.
+- Integration test: an empty actor value (`actor=`) and empty list entries return `400` with `errors[0].field == "actor"`.
+- Integration test: eleven raw actor entries return `400` with `errors[0].field == "actor"`.
+- Pagination integration test on a mixed filter: page 1 with `actor=a1,a2` plus another filter such as `resource=project:42`, then page 2 with the returned token and `actor=a2,a1`, yields the same remaining result set with no duplicates or gaps and excludes rows outside either filter.
 - README updated with the comma-separated actor filter contract.
 
 **Dependencies:** 07.
