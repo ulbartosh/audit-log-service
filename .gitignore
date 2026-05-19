@@ -28,5 +28,8 @@ application-local.properties
 .DS_Store
 Thumbs.db
 
-# Claude Code (per-user agent settings — never share)
-.claude/
+# Claude Code — ignore personal settings, track shared config and skills
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+!.claude/skills/**
