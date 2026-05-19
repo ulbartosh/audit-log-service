@@ -67,8 +67,9 @@ public class AuditEventController {
     }
     int cappedSize = Math.min(size, MAX_PAGE_SIZE);
     Optional<Cursor> cursor = pageToken.map(pageTokenCodec::decode);
+    List<String> actorIds = actor == null ? List.of() : List.of(actor);
     KeysetPage<AuditEvent> result =
-        service.search(new SearchQuery(actor, resource, from, to, cursor, cappedSize));
+        service.search(new SearchQuery(actorIds, resource, from, to, cursor, cappedSize));
 
     List<AuditEventResponse> items = result.items().stream().map(AuditEventResponse::from).toList();
     String nextToken = pageTokenCodec.encode(result.nextCursor().orElse(null));

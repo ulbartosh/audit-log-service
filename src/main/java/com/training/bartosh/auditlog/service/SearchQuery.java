@@ -2,14 +2,23 @@ package com.training.bartosh.auditlog.service;
 
 import com.training.bartosh.auditlog.domain.Cursor;
 import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 public record SearchQuery(
-    String actor, String resource, Instant from, Instant to, Optional<Cursor> cursor, int size) {
+    List<String> actorIds,
+    String resource,
+    Instant from,
+    Instant to,
+    Optional<Cursor> cursor,
+    int size) {
 
   public SearchQuery {
-    if (actor != null && actor.isBlank()) {
-      throw new IllegalArgumentException("actor must be non-blank when present");
+    Objects.requireNonNull(actorIds, "actorIds must not be null");
+    actorIds = List.copyOf(actorIds);
+    if (actorIds.stream().anyMatch(actorId -> actorId == null || actorId.isBlank())) {
+      throw new IllegalArgumentException("actorIds must contain only non-blank values");
     }
     if (resource != null && resource.isBlank()) {
       throw new IllegalArgumentException("resource must be non-blank when present");
