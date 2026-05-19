@@ -73,6 +73,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         .body(Map.of("errors", List.of(Map.of("field", ex.field(), "message", message))));
   }
 
+  @ExceptionHandler(InvalidActorFilterException.class)
+  public ResponseEntity<Map<String, Object>> handleInvalidActorFilter(
+      InvalidActorFilterException ex) {
+    String message = ex.getMessage() == null ? "Invalid actor filter" : ex.getMessage();
+    return ResponseEntity.badRequest()
+        .body(Map.of("errors", List.of(Map.of("field", ex.field(), "message", message))));
+  }
+
   @ExceptionHandler(Exception.class)
   public ResponseEntity<Map<String, Object>> handleUnknown(Exception ex) {
     log.error("Unhandled error", ex);

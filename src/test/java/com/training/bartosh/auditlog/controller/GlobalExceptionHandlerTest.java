@@ -52,4 +52,29 @@ class GlobalExceptionHandlerTest {
         Map.of("errors", List.of(Map.of("field", "pageToken", "message", "Invalid page token"))),
         response.getBody());
   }
+
+  @Test
+  void invalidActorFilterMapsToBadRequestWithFieldActor() {
+    ResponseEntity<Map<String, Object>> response =
+        handler.handleInvalidActorFilter(
+            new InvalidActorFilterException("actor entries must not be empty"));
+
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    assertEquals(
+        Map.of(
+            "errors",
+            List.of(Map.of("field", "actor", "message", "actor entries must not be empty"))),
+        response.getBody());
+  }
+
+  @Test
+  void invalidActorFilterWithNullMessageRendersDefaultMessage() {
+    ResponseEntity<Map<String, Object>> response =
+        handler.handleInvalidActorFilter(new InvalidActorFilterException(null));
+
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    assertEquals(
+        Map.of("errors", List.of(Map.of("field", "actor", "message", "Invalid actor filter"))),
+        response.getBody());
+  }
 }
