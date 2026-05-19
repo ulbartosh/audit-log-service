@@ -473,6 +473,58 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
   }
 
   @Test
+  void getPaginatesMixedActorFilterWhenActorOrderChanges() throws Exception {
+    String excludedByActor = seedAndReturnId("a3", "user.login", "SUCCESS", "project:42");
+    Thread.sleep(2);
+    String match1 = seedAndReturnId("a1", "user.login", "SUCCESS", "project:42");
+    Thread.sleep(2);
+    String excludedByResource = seedAndReturnId("a1", "user.login", "SUCCESS", "project:99");
+    Thread.sleep(2);
+    String match2 = seedAndReturnId("a2", "user.login", "SUCCESS", "project:42");
+    Thread.sleep(2);
+    String match3 = seedAndReturnId("a1", "user.logout", "SUCCESS", "project:42");
+    Thread.sleep(2);
+    String match4 = seedAndReturnId("a2", "user.logout", "SUCCESS", "project:42");
+    Set<String> matching = Set.of(match1, match2, match3, match4);
+
+    MvcResult page1 =
+        mvc.perform(
+                get("/audit-events")
+                    .param("actor", "a1,a2")
+                    .param("resource", "project:42")
+                    .param("size", "2"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", hasSize(2)))
+            .andExpect(jsonPath("$.nextPageToken").exists())
+            .andReturn();
+    JsonNode page1Tree = objectMapper.readTree(page1.getResponse().getContentAsString());
+    Set<String> page1Ids = collectIds(page1Tree);
+    String token = page1Tree.get("nextPageToken").asText();
+
+    MvcResult page2 =
+        mvc.perform(
+                get("/audit-events")
+                    .param("actor", "a2,a1")
+                    .param("resource", "project:42")
+                    .param("size", "2")
+                    .param("pageToken", token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", hasSize(2)))
+            .andExpect(jsonPath("$.nextPageToken").doesNotExist())
+            .andReturn();
+    JsonNode page2Tree = objectMapper.readTree(page2.getResponse().getContentAsString());
+    Set<String> page2Ids = collectIds(page2Tree);
+
+    Set<String> combined = new HashSet<>(page1Ids);
+    combined.addAll(page2Ids);
+    assertEquals(page1Ids.size() + page2Ids.size(), combined.size(), "pages must not overlap");
+    assertEquals(matching, combined, "page walk must include every matching row exactly once");
+    assertFalse(combined.contains(excludedByActor), "rows outside the actor set must be excluded");
+    assertFalse(
+        combined.contains(excludedByResource), "rows outside the resource filter must be excluded");
+  }
+
+  @Test
   void getCapsSizeAt500EvenWhenLarger() throws Exception {
     for (int i = 0; i < 501; i++) {
       seed("cap-user", "user.login", "SUCCESS");
@@ -571,11 +623,18 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
   }
 
   private String seedAndReturnId(String actor, String action, String outcome) throws Exception {
+    return seedAndReturnId(actor, action, outcome, null);
+  }
+
+  private String seedAndReturnId(String actor, String action, String outcome, String resource)
+      throws Exception {
+    String resourceFragment =
+        resource == null ? "" : ",\"resource\":{\"id\":\"%s\"}".formatted(resource);
     String body =
         """
-        {"actor":{"id":"%s"},"action":"%s","outcome":"%s"}
+        {"actor":{"id":"%s"},"action":"%s","outcome":"%s"%s}
         """
-            .formatted(actor, action, outcome);
+            .formatted(actor, action, outcome, resourceFragment);
     MvcResult result =
         mvc.perform(post("/audit-events").contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isCreated())
