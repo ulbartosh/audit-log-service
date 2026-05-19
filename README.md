@@ -70,7 +70,7 @@ Search events. All filters optional; results sorted by `(occurredAt DESC, id DES
 
 | Param | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `actor` | string | - | Exact match. Non-blank when present. |
+| `actor` | comma-separated string | - | One to ten actor IDs in a single parameter. Entries are trimmed, de-duplicated, and matched exactly against `actor.id`. Empty entries return `400`. |
 | `resource` | string | - | Exact match. Non-blank when present. |
 | `from` | ISO-8601 instant | — | Inclusive lower bound on `occurredAt` |
 | `to` | ISO-8601 instant | — | Inclusive upper bound on `occurredAt` |
@@ -96,6 +96,8 @@ Response: `200 OK` with
 ```
 
 `nextPageToken` is omitted when the current page exhausts the result set. Repeat the same filters on each follow-up request; the token carries only the position in the sort order.
+
+Actor filters match any listed actor ID (`actor=alice,bob` behaves like `actor.id IN ("alice","bob")`). The ten-entry cap is applied before de-duplicating repeated IDs. `actor=`, `actor=alice,,bob`, `actor=alice,`, and eleven or more raw actor entries return `400 Bad Request` with `field: "actor"`.
 
 ### Event schema
 
@@ -128,11 +130,11 @@ curl -i -X POST http://localhost:8080/audit-events \
   -H 'Content-Type: application/json' \
   -d '{"actor":{"id":"alice"},"action":"user.login","outcome":"SUCCESS","payload":{"source":"curl"}}'
 
-# Search
-curl 'http://localhost:8080/audit-events?actor=alice'
+# Search for one or more actors
+curl 'http://localhost:8080/audit-events?actor=alice,bob'
 
 # Continue from a previous search response
-curl 'http://localhost:8080/audit-events?actor=alice&size=25&pageToken=<nextPageToken>'
+curl 'http://localhost:8080/audit-events?actor=alice,bob&size=25&pageToken=<nextPageToken>'
 
 # Validation error (missing actor)
 curl -i -X POST http://localhost:8080/audit-events \

@@ -274,7 +274,8 @@ _(append after merge)_
 **Dependencies:** 07.
 
 **Execution result:**
-_(append after merge)_
+Done (2026-05-19). Implemented the comma-separated actor filter in five safe commits: parser/error mapping, `SearchQuery.actorIds`, persistence `IN` predicate, controller wiring, mixed-filter pagination regression, and README contract updates.
+Verification passed: `rtk ./gradlew test`, `rtk ./gradlew --no-daemon integrationTest`, `rtk ./gradlew --no-daemon check`, and `rtk ./gradlew --no-daemon build`. No follow-up.
 
 ---
 
