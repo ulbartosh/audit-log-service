@@ -42,10 +42,12 @@ Subsequent pages add `&pageToken=<opaque>`; see `design.md` for the cursor shape
 ## Filter semantics
 
 - The `actor` parameter accepts one to ten comma-separated actor IDs in a single query parameter.
+- Multiple `actor` IDs are evaluated as one OR-style filter in a single query, equivalent to `actor IN (...)`; the service must not fan out into one query per actor.
 - Each `actor` entry is trimmed of surrounding whitespace before validation and matching.
 - The `actor` filter matches any listed actor `id` exactly (case-sensitive); `actor.type` is not a query filter in this iteration.
-- Empty `actor` entries are invalid, including `actor=`, `actor=a1,,a2`, and `actor=a1,`.
+- Empty `actor` entries are invalid with `400 Bad Request`, including `actor=`, `actor=a1,,a2`, and `actor=a1,`.
 - The maximum of ten `actor` entries is applied before de-duplicating repeated IDs.
+- More than ten raw `actor` entries are invalid with `422 Unprocessable Entity`.
 - Duplicate actor IDs are accepted within the ten-entry limit and are de-duplicated after validation.
 - Actor-list order and duplicates do not affect filter identity; `actor=a1,a2`, `actor=a2,a1`, and `actor=a1,a1,a2` are equivalent filters.
 - The `resource` parameter matches the resource's `id` exactly (case-sensitive); `resource.type` is not a query filter in this iteration.
@@ -54,7 +56,7 @@ Subsequent pages add `&pageToken=<opaque>`; see `design.md` for the cursor shape
 
 ## Acceptance criteria
 
-### US-1 Compliance officer — confirm or refute an action during an audit
+### US-1 Assembled intelligence officer — confirm or refute an action during an audit
 
 - When the client sends `GET /audit-events` with `actor` containing comma-separated IDs, the system shall return only events whose actor `id` matches any listed ID.
 - When the client sends `GET /audit-events` with `actor` entries containing surrounding whitespace, the system shall trim the entries before matching actor IDs.
@@ -67,7 +69,7 @@ Subsequent pages add `&pageToken=<opaque>`; see `design.md` for the cursor shape
 - The system shall return `resource` as a structured object `{ id, type }` in every event.
 - When the matched event set is empty, the system shall return `200 OK` with `"items": []` and `nextPageToken` omitted.
 - If `actor` contains an empty entry, then the system shall return `400 Bad Request`.
-- If `actor` contains more than ten comma-separated entries before de-duplication, then the system shall return `400 Bad Request`.
+- If `actor` contains more than ten comma-separated entries before de-duplication, then the system shall return `422 Unprocessable Entity`.
 - If `from` is not a valid ISO-8601 instant, then the system shall return `400 Bad Request`.
 - If `to` is not a valid ISO-8601 instant, then the system shall return `400 Bad Request`.
 - If `from` is after `to`, then the system shall return `400 Bad Request`.
@@ -80,7 +82,7 @@ Subsequent pages add `&pageToken=<opaque>`; see `design.md` for the cursor shape
 - When an event has a `context`, the system shall include the field in that event's response object.
 - When an event has no `context`, the system shall omit the field from that event's response object.
 
-### US-3 Security analyst — paginate a large result set without loss or duplication
+### US-3 Security intelligence analyst — paginate a large result set without loss or duplication
 
 - The system shall support paginated retrieval of result sets larger than a single response can carry.
 - The system shall cap any single response at `500` events, regardless of any client-requested page size.

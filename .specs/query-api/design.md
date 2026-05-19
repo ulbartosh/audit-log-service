@@ -7,7 +7,7 @@
 | 1 | `total` field in response | **Dropped.** No persona has a stated need; inherited from offset-pagination convention. |
 | 2 | Pagination strategy & wire shape | **Keyset on the wire**, opaque `nextPageToken`. No `page`, no `total`. |
 | 3 | Deterministic sort with tiebreaker | `ORDER BY occurred_at DESC, id DESC`. `id` (`UUID PRIMARY KEY`) is unique → total order. |
-| 4 | Indexes for the filterable columns | Keep the existing three composite indexes on `(filter, occurred_at DESC, id DESC)`. Multi-actor filters are bounded to ten IDs and use the actor/time index with `actor IN (...)`; no new migration is required. See § Data model. |
+| 4 | Indexes for the filterable columns | Keep the existing three composite indexes on `(filter, occurred_at DESC, id DESC)`. Multi-actor filters are bounded to ten IDs and use the actor/time index with `actor IN (...)`; no T08-specific migration is required. See § Data model for the explicit index justification. |
 | 5 | `resource.id` extraction | Wire `resource.id` keeps the full string. DB stores `resource_type` in a new column. |
 | 6 | `resource.type` shape | **Free-form non-blank string.** Not constrained to an enum. |
 | 7 | `actor.type` values | **`USER` only** this iteration. Enum is extensible (column type is `TEXT`). |
@@ -62,7 +62,8 @@ Response (replaces today's `PagedResponse<T>` for this endpoint):
 | Code | When |
 |---|---|
 | `200 OK` | Success, including empty result sets. |
-| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `resource`; blank/empty actor entries; more than ten raw actor entries; invalid `size`; malformed or unsupported-version `pageToken`. |
+| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `resource`; blank/empty actor entries; invalid `size`; malformed or unsupported-version `pageToken`. |
+| `422 Unprocessable Entity` | More than ten raw `actor` entries before de-duplication. |
 | `500 Internal Server Error` | Unexpected failure. Opaque body, full stack to log. |
 
 ### Changes to existing `POST /audit-events`
@@ -101,7 +102,7 @@ Field-level changes:
 OR (occurred_at = :cursor_ts AND id < :cursor_id)
 ```
 
-**Filter predicates.** Caller filters are composed with AND. The actor filter is parsed into a canonical unique list and rendered as `actor IN (:actor_ids)`; a single actor is the one-element form of the same predicate. `resource` remains an exact equality predicate. `from` and `to` remain inclusive bounds.
+**Filter predicates.** Caller filters are composed with AND. The actor filter is parsed into a canonical unique list and rendered as one OR-style predicate in a single database query: `actor IN (:actor_ids)`. A single actor is the one-element form of the same predicate. The implementation must not issue one query per actor. `resource` remains an exact equality predicate. `from` and `to` remain inclusive bounds.
 
 **Stability under concurrent ingest.** New events arrive with `occurred_at >= now`. Because pages are walked strictly *backwards* through `(occurred_at, id)` order, new rows are always ahead of every issued cursor and cannot appear on later pages, nor can they shift the position of older rows. No `to` pinning is required.
 
@@ -153,7 +154,7 @@ CREATE INDEX idx_audit_events_time
 ### Index notes
 
 - Each composite index ends with `id DESC` so PostgreSQL can satisfy `ORDER BY occurred_at DESC, id DESC` directly from the index without a separate sort step.
-- Multi-actor filters use the existing `idx_audit_events_actor_time` index with a bounded `actor IN (...)` predicate. Keeping this index avoids another migration and preserves the efficient leading equality + descending time walk for the common actor-filtered path.
+- Multi-actor filters use the existing composite `idx_audit_events_actor_time (actor, occurred_at DESC, id DESC)` index with a bounded `actor IN (...)` predicate. This is the explicit justification for not adding another T08-specific actor-list index: the leading `actor` column supports the IN/equality lookup, and the `(occurred_at DESC, id DESC)` suffix supports the keyset walk and response ordering.
 - Trade-off: combined `actor + resource` filters may require the planner to use the actor or resource index and recheck the other predicate. The actor list is capped at ten raw entries to bound this cost; revisit with a composite `(actor, resource, occurred_at DESC, id DESC)` index only if production profiling shows combined filters are hot.
 - No index on `actor_type` or `resource_type` — they are response fields, not filters, in this iteration.
 
@@ -169,7 +170,7 @@ None. Per resolution #8, the table is empty.
 
 | Param | Rule |
 |---|---|
-| `actor` | If present, split on commas. Raw entry count must be 1–10 before de-duplication; trim each entry; reject empty entries after trimming; de-duplicate repeated IDs; sort unique IDs lexicographically for canonical filter identity; exact case-sensitive match against any unique ID. |
+| `actor` | If present, split on commas. Raw entry count must be 1–10 before de-duplication; trim each entry; reject empty entries after trimming with `400`; reject more than ten raw entries with `422`; de-duplicate repeated IDs; sort unique IDs lexicographically for canonical filter identity; exact case-sensitive match against any unique ID. |
 | `resource` | If present, must be non-blank. Exact match against full `resource` column. |
 | `from` | If present, must parse as ISO-8601 instant. → `400` on parse failure. |
 | `to` | If present, must parse as ISO-8601 instant. → `400` on parse failure. |
@@ -261,7 +262,7 @@ Implementation: build Specification from filters, compose `byActors(actorIds)` o
 ### `controller/`
 
 - `AuditEventController.search(...)` — `@RequestParam Optional<String> actor, @RequestParam Optional<String> pageToken, @RequestParam(defaultValue = "50") int size`. Parse actor with an `ActorFilterParser` in `controller/` before constructing `SearchQuery`. Decode/encode the token in a `PageTokenCodec` bean (lives in `controller/` so the domain doesn't import `java.util.Base64`).
-- `ActorFilterParser` — split a single comma-separated `actor` parameter, enforce the 1–10 raw-entry limit, trim entries, reject empty entries, de-duplicate, and sort unique IDs to produce the canonical actor list. Map validation failures to `400 Bad Request` with `field = "actor"`.
+- `ActorFilterParser` — split a single comma-separated `actor` parameter, enforce the 1–10 raw-entry limit, trim entries, reject empty entries, de-duplicate, and sort unique IDs to produce the canonical actor list. Map empty-entry validation failures to `400 Bad Request` with `field = "actor"`; map more than ten raw entries to `422 Unprocessable Entity` with `field = "actor"`.
 - New `KeysetPageResponse<T>(List<T> items, String nextPageToken)` DTO, annotated `@JsonInclude(NON_NULL)` so `nextPageToken` is omitted when null.
 - New nested DTOs in `controller/dto/`:
 
