@@ -49,8 +49,8 @@ public class AuditEventService {
   @Transactional(readOnly = true)
   public KeysetPage<AuditEvent> search(SearchQuery query) {
     List<Specification<AuditEventEntity>> specs = new ArrayList<>();
-    if (query.actor() != null) {
-      specs.add(AuditEventSpecifications.byActor(query.actor()));
+    if (!query.actorIds().isEmpty()) {
+      specs.add(AuditEventSpecifications.byActors(query.actorIds()));
     }
     if (query.resource() != null) {
       specs.add(AuditEventSpecifications.byResource(query.resource()));

@@ -1,6 +1,8 @@
 package com.training.bartosh.auditlog.persistence;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
@@ -13,8 +15,9 @@ public final class AuditEventSpecifications {
 
   private AuditEventSpecifications() {}
 
-  public static Specification<AuditEventEntity> byActor(String actor) {
-    return (root, query, cb) -> cb.equal(root.get(AuditEventEntity_.actor), actor);
+  public static Specification<AuditEventEntity> byActors(Collection<String> actorIds) {
+    List<String> canonicalActorIds = List.copyOf(Objects.requireNonNull(actorIds));
+    return (root, query, cb) -> root.get(AuditEventEntity_.actor).in(canonicalActorIds);
   }
 
   public static Specification<AuditEventEntity> byResource(String resource) {

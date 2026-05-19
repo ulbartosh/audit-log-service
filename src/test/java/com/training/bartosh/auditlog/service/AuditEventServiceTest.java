@@ -98,7 +98,7 @@ class AuditEventServiceTest {
     when(repository.findBy(specification(), anyFluentQueryFunction()))
         .thenAnswer(inv -> applyFluentQuery(inv.getArgument(1), List.of(), captor));
 
-    service.search(new SearchQuery(null, null, null, null, Optional.empty(), 10));
+    service.search(new SearchQuery(List.of(), null, null, null, Optional.empty(), 10));
 
     assertEquals(11, captor.getValue(), "service must over-fetch by one");
   }
@@ -109,7 +109,7 @@ class AuditEventServiceTest {
         .thenAnswer(inv -> applyFluentQuery(inv.getArgument(1), entities(10)));
 
     KeysetPage<AuditEvent> page =
-        service.search(new SearchQuery(null, null, null, null, Optional.empty(), 10));
+        service.search(new SearchQuery(List.of(), null, null, null, Optional.empty(), 10));
 
     assertEquals(10, page.items().size());
     assertTrue(page.nextCursor().isEmpty());
@@ -123,7 +123,7 @@ class AuditEventServiceTest {
         .thenAnswer(inv -> applyFluentQuery(inv.getArgument(1), rows));
 
     KeysetPage<AuditEvent> page =
-        service.search(new SearchQuery(null, null, null, null, Optional.empty(), 10));
+        service.search(new SearchQuery(List.of(), null, null, null, Optional.empty(), 10));
 
     assertEquals(10, page.items().size());
     assertTrue(page.nextCursor().isPresent());
@@ -136,10 +136,23 @@ class AuditEventServiceTest {
     when(repository.findBy(specification(), anyFluentQueryFunction()))
         .thenAnswer(inv -> applyFluentQuery(inv.getArgument(1), List.of()));
 
-    service.search(new SearchQuery(null, null, null, null, Optional.empty(), 10));
+    service.search(new SearchQuery(List.of(), null, null, null, Optional.empty(), 10));
 
     verify(repository).findBy(specification(), anyFluentQueryFunction());
     verify(repository, never()).findAll(any(Specification.class), any(Pageable.class));
+  }
+
+  @Test
+  void searchAcceptsNonEmptyActorIdList() {
+    when(repository.findBy(specification(), anyFluentQueryFunction()))
+        .thenAnswer(inv -> applyFluentQuery(inv.getArgument(1), List.of()));
+
+    KeysetPage<AuditEvent> page =
+        service.search(
+            new SearchQuery(List.of("a1", "a2"), null, null, null, Optional.empty(), 10));
+
+    assertTrue(page.items().isEmpty());
+    assertTrue(page.nextCursor().isEmpty());
   }
 
   private static List<AuditEventEntity> entities(int count) {
