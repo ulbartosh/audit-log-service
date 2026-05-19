@@ -62,8 +62,7 @@ Response (replaces today's `PagedResponse<T>` for this endpoint):
 | Code | When |
 |---|---|
 | `200 OK` | Success, including empty result sets. |
-| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `resource`; blank/empty actor entries; invalid `size`; malformed or unsupported-version `pageToken`. |
-| `422 Unprocessable Entity` | More than ten raw `actor` entries before de-duplication. |
+| `400 Bad Request` | Malformed `from`/`to`; `from` after `to`; blank `resource`; blank/empty actor entries; more than ten raw `actor` entries before de-duplication; invalid `size`; malformed or unsupported-version `pageToken`. |
 | `500 Internal Server Error` | Unexpected failure. Opaque body, full stack to log. |
 
 ### Changes to existing `POST /audit-events`
@@ -170,7 +169,7 @@ None. Per resolution #8, the table is empty.
 
 | Param | Rule |
 |---|---|
-| `actor` | If present, split on commas. Raw entry count must be 1–10 before de-duplication; trim each entry; reject empty entries after trimming with `400`; reject more than ten raw entries with `422`; de-duplicate repeated IDs; sort unique IDs lexicographically for canonical filter identity; exact case-sensitive match against any unique ID. |
+| `actor` | If present, split on commas. Raw entry count must be 1–10 before de-duplication; trim each entry; reject empty entries after trimming with `400`; reject more than ten raw entries with `400`; de-duplicate repeated IDs; sort unique IDs lexicographically for canonical filter identity; exact case-sensitive match against any unique ID. |
 | `resource` | If present, must be non-blank. Exact match against full `resource` column. |
 | `from` | If present, must parse as ISO-8601 instant. → `400` on parse failure. |
 | `to` | If present, must parse as ISO-8601 instant. → `400` on parse failure. |
@@ -262,7 +261,7 @@ Implementation: build Specification from filters, compose `byActors(actorIds)` o
 ### `controller/`
 
 - `AuditEventController.search(...)` — `@RequestParam Optional<String> actor, @RequestParam Optional<String> pageToken, @RequestParam(defaultValue = "50") int size`. Parse actor with an `ActorFilterParser` in `controller/` before constructing `SearchQuery`. Decode/encode the token in a `PageTokenCodec` bean (lives in `controller/` so the domain doesn't import `java.util.Base64`).
-- `ActorFilterParser` — split a single comma-separated `actor` parameter, enforce the 1–10 raw-entry limit, trim entries, reject empty entries, de-duplicate, and sort unique IDs to produce the canonical actor list. Map empty-entry validation failures to `400 Bad Request` with `field = "actor"`; map more than ten raw entries to `422 Unprocessable Entity` with `field = "actor"`.
+- `ActorFilterParser` — split a single comma-separated `actor` parameter, enforce the 1–10 raw-entry limit, trim entries, reject empty entries, de-duplicate, and sort unique IDs to produce the canonical actor list. Map all actor validation failures (empty entries and more than ten raw entries) to `400 Bad Request` with `field = "actor"`.
 - New `KeysetPageResponse<T>(List<T> items, String nextPageToken)` DTO, annotated `@JsonInclude(NON_NULL)` so `nextPageToken` is omitted when null.
 - New nested DTOs in `controller/dto/`:
 

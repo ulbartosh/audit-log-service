@@ -247,12 +247,12 @@ _(append after merge)_
   - `compliance/actor-trim` — actor entries are trimmed before matching.
   - `compliance/actor-duplicates` — duplicate actor IDs behave as one filter value.
   - `compliance/actor-empty-entry` — empty actor entries return `400`.
-  - `compliance/actor-max-ten` — more than ten raw actor entries return `422`.
+  - `compliance/actor-max-ten` — more than ten raw actor entries return `400`.
   - `analyst/actor-order-pagination` — same actor ID set in different order is identical for pagination consistency.
 
 **Scope**
 - `controller/ActorFilterParser` — parse the single `actor` query parameter into a canonical immutable actor ID list: split on commas, enforce 1–10 raw entries before de-duplication, trim entries, reject empty entries, de-duplicate, and sort unique IDs lexicographically.
-- `controller/AuditEventController.search(...)` — pass the canonical actor ID list into `SearchQuery`; render empty actor entries as `400 Bad Request` with `errors[0].field == "actor"` and more than ten raw actor entries as `422 Unprocessable Entity` with `errors[0].field == "actor"`.
+- `controller/AuditEventController.search(...)` — pass the canonical actor ID list into `SearchQuery`; render actor validation errors (empty entries or more than ten raw entries) as `400 Bad Request` with `errors[0].field == "actor"`.
 - `service/SearchQuery` — replace the single actor string with `List<String> actorIds`.
 - `persistence/AuditEventSpecifications` — replace `byActor(String)` search usage with `byActors(Collection<String>)` using an `IN` predicate against the existing `actor` column.
 - Actor filtering is a single query-level OR/IN predicate, not one repository/database query per actor. No new T08 migration is required because `design.md` explicitly justifies the existing `idx_audit_events_actor_time (actor, occurred_at DESC, id DESC)` index for the bounded actor-list filter.
@@ -267,7 +267,7 @@ _(append after merge)_
 - Integration test: `GET /audit-events?actor=%20a1%20,%20a2%20` trims entries before matching.
 - Integration test: duplicate actor IDs such as `actor=a1,a1,a2` behave like `actor=a1,a2`.
 - Integration test: an empty actor value (`actor=`) and empty list entries return `400` with `errors[0].field == "actor"`.
-- Integration test: eleven raw actor entries return `422` with `errors[0].field == "actor"`.
+- Integration test: eleven raw actor entries return `400` with `errors[0].field == "actor"`.
 - Pagination integration test on a mixed filter: page 1 with `actor=a1,a2` plus another filter such as `resource=project:42`, then page 2 with the returned token and `actor=a2,a1`, yields the same remaining result set with no duplicates or gaps and excludes rows outside either filter.
 - README updated with the comma-separated actor filter contract.
 

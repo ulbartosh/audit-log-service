@@ -47,7 +47,7 @@ Subsequent pages add `&pageToken=<opaque>`; see `design.md` for the cursor shape
 - The `actor` filter matches any listed actor `id` exactly (case-sensitive); `actor.type` is not a query filter in this iteration.
 - Empty `actor` entries are invalid with `400 Bad Request`, including `actor=`, `actor=a1,,a2`, and `actor=a1,`.
 - The maximum of ten `actor` entries is applied before de-duplicating repeated IDs.
-- More than ten raw `actor` entries are invalid with `422 Unprocessable Entity`.
+- More than ten raw `actor` entries are invalid with `400 Bad Request`.
 - Duplicate actor IDs are accepted within the ten-entry limit and are de-duplicated after validation.
 - Actor-list order and duplicates do not affect filter identity; `actor=a1,a2`, `actor=a2,a1`, and `actor=a1,a1,a2` are equivalent filters.
 - The `resource` parameter matches the resource's `id` exactly (case-sensitive); `resource.type` is not a query filter in this iteration.
@@ -69,7 +69,7 @@ Subsequent pages add `&pageToken=<opaque>`; see `design.md` for the cursor shape
 - The system shall return `resource` as a structured object `{ id, type }` in every event.
 - When the matched event set is empty, the system shall return `200 OK` with `"items": []` and `nextPageToken` omitted.
 - If `actor` contains an empty entry, then the system shall return `400 Bad Request`.
-- If `actor` contains more than ten comma-separated entries before de-duplication, then the system shall return `422 Unprocessable Entity`.
+- If `actor` contains more than ten comma-separated entries before de-duplication, then the system shall return `400 Bad Request`.
 - If `from` is not a valid ISO-8601 instant, then the system shall return `400 Bad Request`.
 - If `to` is not a valid ISO-8601 instant, then the system shall return `400 Bad Request`.
 - If `from` is after `to`, then the system shall return `400 Bad Request`.

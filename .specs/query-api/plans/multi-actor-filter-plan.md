@@ -32,7 +32,7 @@ Implementation:
   reject empty entries, de-duplicate, and sort lexicographically.
 - Add actor-filter exception handling:
   - Empty actor values/list entries return `400 Bad Request`.
-  - More than ten raw actor entries return `422 Unprocessable Entity`.
+  - More than ten raw actor entries return `400 Bad Request`.
   - Both error bodies include `errors[0].field == "actor"`.
 
 Tests:
@@ -46,7 +46,7 @@ Tests:
   - sorted unique output,
   - empty values: `actor=`, `a1,,a2`, `a1,`,
   - eleven raw values.
-- Handler tests for actor parse errors mapping to `400` and `422`.
+- Handler tests for actor parse errors (empty entries and more than ten raw entries) mapping to `400`.
 
 Verification after commit:
 
@@ -112,7 +112,7 @@ Tests:
   - `GET /audit-events?actor=a1,a1,a2` behaves like `actor=a1,a2`.
 - Controller integration tests for validation:
   - empty actor value/list entries return `400` with `field == "actor"`,
-  - eleven raw actor entries return `422` with `field == "actor"`.
+  - eleven raw actor entries return `400` with `field == "actor"`.
 
 Verification after commit:
 
@@ -156,7 +156,7 @@ Implementation:
   - comma-separated actor filters,
   - maximum ten raw actor entries,
   - `400` for empty actor values/list entries,
-  - `422` for eleven or more raw actor entries,
+  - `400` for eleven or more raw actor entries,
   - `pageToken` continuation with repeated filters.
 - Keep the README focused on user/operator-facing behavior only.
 
