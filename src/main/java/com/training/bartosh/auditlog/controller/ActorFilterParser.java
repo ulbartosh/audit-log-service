@@ -16,7 +16,8 @@ public class ActorFilterParser {
 
     String[] rawEntries = rawActor.split(",", -1);
     if (rawEntries.length > MAX_RAW_ACTOR_ENTRIES) {
-      throw new InvalidActorFilterException("actor must contain at most 10 entries");
+      throw new InvalidActorFilterException(
+          "actor must contain at most " + MAX_RAW_ACTOR_ENTRIES + " entries");
     }
 
     List<String> actorIds =
