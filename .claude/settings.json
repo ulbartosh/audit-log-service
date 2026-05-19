@@ -2,13 +2,9 @@
   "hooks": {
     "Stop": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 .codex/hooks/spec_self_eval_stop.py",
-            "timeout": 900
-          }
-        ]
+        "type": "command",
+        "command": "python3 .codex/hooks/spec_self_eval_stop.py",
+        "timeout": 900
       }
     ]
   }
