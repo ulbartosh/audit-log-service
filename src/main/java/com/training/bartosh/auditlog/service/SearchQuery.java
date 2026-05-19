@@ -17,7 +17,7 @@ public record SearchQuery(
   public SearchQuery {
     Objects.requireNonNull(actorIds, "actorIds must not be null");
     actorIds = List.copyOf(actorIds);
-    if (actorIds.stream().anyMatch(actorId -> actorId == null || actorId.isBlank())) {
+    if (actorIds.stream().anyMatch(String::isBlank)) {
       throw new IllegalArgumentException("actorIds must contain only non-blank values");
     }
     if (resource != null && resource.isBlank()) {
