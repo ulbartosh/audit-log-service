@@ -87,6 +87,7 @@ Subsequent pages add `&pageToken=<opaque>`; see `design.md` for the cursor shape
 - The system shall guarantee that consecutive pages requested with identical filters return each matching row exactly once across the pagination session.
 - When consecutive pages are requested with the same actor ID set in a different order, the system shall treat the actor filter as identical for pagination consistency.
 - When the client requests a page beyond the end of the result set, the system shall return `200 OK` with `"items": []`.
+- If `pageToken` is malformed or uses an unsupported version, then the system shall return `400 Bad Request`.
 
 ## Out of scope
 
