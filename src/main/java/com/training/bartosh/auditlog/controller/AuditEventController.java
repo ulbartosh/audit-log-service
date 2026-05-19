@@ -32,10 +32,15 @@ public class AuditEventController {
 
   private final AuditEventService service;
   private final PageTokenCodec pageTokenCodec;
+  private final ActorFilterParser actorFilterParser;
 
-  public AuditEventController(AuditEventService service, PageTokenCodec pageTokenCodec) {
+  public AuditEventController(
+      AuditEventService service,
+      PageTokenCodec pageTokenCodec,
+      ActorFilterParser actorFilterParser) {
     this.service = service;
     this.pageTokenCodec = pageTokenCodec;
+    this.actorFilterParser = actorFilterParser;
   }
 
   @PostMapping
@@ -67,7 +72,7 @@ public class AuditEventController {
     }
     int cappedSize = Math.min(size, MAX_PAGE_SIZE);
     Optional<Cursor> cursor = pageToken.map(pageTokenCodec::decode);
-    List<String> actorIds = actor == null ? List.of() : List.of(actor);
+    List<String> actorIds = actorFilterParser.parse(actor);
     KeysetPage<AuditEvent> result =
         service.search(new SearchQuery(actorIds, resource, from, to, cursor, cappedSize));
 
