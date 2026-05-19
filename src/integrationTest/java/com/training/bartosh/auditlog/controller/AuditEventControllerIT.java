@@ -194,6 +194,73 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
   }
 
   @Test
+  void getFiltersByMultipleActors() throws Exception {
+    seed("a1", "user.login", "SUCCESS");
+    seed("a2", "user.login", "SUCCESS");
+    seed("a3", "user.login", "SUCCESS");
+    seed("other", "user.login", "SUCCESS");
+
+    MvcResult result =
+        mvc.perform(get("/audit-events").param("actor", "a1,a2,a3"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", hasSize(3)))
+            .andReturn();
+
+    JsonNode tree = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertEquals(Set.of("a1", "a2", "a3"), collectActorIds(tree));
+  }
+
+  @Test
+  void getAcceptsExactlyTenActorEntries() throws Exception {
+    for (int i = 1; i <= 10; i++) {
+      seed("a" + i, "user.login", "SUCCESS");
+    }
+    seed("other", "user.login", "SUCCESS");
+
+    MvcResult result =
+        mvc.perform(get("/audit-events").param("actor", "a1,a2,a3,a4,a5,a6,a7,a8,a9,a10"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", hasSize(10)))
+            .andReturn();
+
+    JsonNode tree = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertEquals(
+        Set.of("a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10"), collectActorIds(tree));
+  }
+
+  @Test
+  void getTrimsActorEntriesBeforeMatching() throws Exception {
+    seed("a1", "user.login", "SUCCESS");
+    seed("a2", "user.login", "SUCCESS");
+    seed("other", "user.login", "SUCCESS");
+
+    MvcResult result =
+        mvc.perform(get("/audit-events").param("actor", " a1 , a2 "))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", hasSize(2)))
+            .andReturn();
+
+    JsonNode tree = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertEquals(Set.of("a1", "a2"), collectActorIds(tree));
+  }
+
+  @Test
+  void getDeduplicatesActorEntriesBeforeMatching() throws Exception {
+    seed("a1", "user.login", "SUCCESS");
+    seed("a2", "user.login", "SUCCESS");
+    seed("other", "user.login", "SUCCESS");
+
+    MvcResult result =
+        mvc.perform(get("/audit-events").param("actor", "a1,a1,a2"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items", hasSize(2)))
+            .andReturn();
+
+    JsonNode tree = objectMapper.readTree(result.getResponse().getContentAsString());
+    assertEquals(Set.of("a1", "a2"), collectActorIds(tree));
+  }
+
+  @Test
   void getFiltersByResource() throws Exception {
     seed("u1", "user.login", "SUCCESS", "project:42");
     seed("u2", "user.login", "SUCCESS", "project:99");
@@ -302,7 +369,29 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
   void getRejectsBlankActor() throws Exception {
     mvc.perform(get("/audit-events").param("actor", "   "))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.errors[0].message", containsString("actor")));
+        .andExpect(jsonPath("$.errors[0].field", equalTo("actor")));
+  }
+
+  @Test
+  void getRejectsEmptyActorValueAndEntries() throws Exception {
+    mvc.perform(get("/audit-events").param("actor", ""))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field", equalTo("actor")));
+
+    mvc.perform(get("/audit-events").param("actor", "a1,,a2"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field", equalTo("actor")));
+
+    mvc.perform(get("/audit-events").param("actor", "a1,"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field", equalTo("actor")));
+  }
+
+  @Test
+  void getRejectsMoreThanTenRawActorEntries() throws Exception {
+    mvc.perform(get("/audit-events").param("actor", "a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field", equalTo("actor")));
   }
 
   @Test
@@ -499,5 +588,11 @@ class AuditEventControllerIT extends AuditLogIntegrationTest {
     Set<String> ids = new HashSet<>();
     tree.get("items").forEach(node -> ids.add(node.get("id").asText()));
     return ids;
+  }
+
+  private static Set<String> collectActorIds(JsonNode tree) {
+    Set<String> actorIds = new HashSet<>();
+    tree.get("items").forEach(node -> actorIds.add(node.get("actor").get("id").asText()));
+    return actorIds;
   }
 }
