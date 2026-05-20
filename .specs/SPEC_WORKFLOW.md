@@ -21,14 +21,16 @@ Do not start `design.md` until `requirements.md` is agreed. Do not start `tasks.
 Before writing or editing any spec document, the agent must:
 
 1. Read the existing state of the folder, the relevant code, and `AGENTS.md`.
-2. Identify the decisions it would otherwise make by default.
-3. Ask the user **5–7 short clarifying questions**.
+2. Confirm the spec self-evaluation Stop hook is configured and enabled for `.specs/` work:
+   - `.codex/config.toml` should enable hooks and wire `Stop` to `.codex/hooks/spec_self_eval_stop.py`.
+3. Identify the decisions it would otherwise make by default.
+4. Ask the user **5–7 short clarifying questions**.
    - **One decision = one question.** Don't bundle multiple choices into one question.
    - **Don't invent doubt.** If there is no real ambiguity, ask fewer questions (or none). Padding to hit a number produces noise and trains the user to ignore the ritual.
    - **Surface contradictions explicitly.** If the existing doc disagrees with itself, quote the conflicting lines.
    - Cite the source (file and line) when a question references existing material, so the user can verify quickly.
-4. **Do not write the document until the user answers.** "Before you write anything" is the contract — honor it.
-5. After answers come back, draft the document. Offer a diff/preview before applying further changes downstream.
+5. **Do not write the document until the user answers.** "Before you write anything" is the contract — honor it.
+6. After answers come back, draft the document. Offer a diff/preview before applying further changes downstream.
 
 ## Document shape (informal templates)
 
